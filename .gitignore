@@ -25,7 +25,6 @@ env/
 *.pt
 Development/Final/backend/models/
 Development/Final/backend/data/
-Development/Testwork/
 
 # ─── Node / Frontend ──────────────────────────────────────
 node_modules/
