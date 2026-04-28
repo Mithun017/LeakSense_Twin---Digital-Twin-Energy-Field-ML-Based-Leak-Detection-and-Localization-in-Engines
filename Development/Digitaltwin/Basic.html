@@ -1,0 +1,334 @@
+
+<style>
+@media (prefers-reduced-motion: no-preference) {
+  .flow-air   { stroke-dasharray:7 5; animation: fd 2s linear infinite; }
+  .flow-hot   { stroke-dasharray:7 5; animation: fd 1.5s linear infinite; }
+  .flow-exh   { stroke-dasharray:7 5; animation: fd 1.2s linear infinite; }
+  @keyframes fd { to { stroke-dashoffset:-24; } }
+  .p1a { animation: p1 1.2s ease-in-out infinite; }
+  .p2a { animation: p2 1.2s ease-in-out infinite 0.4s; }
+  .p3a { animation: p3 1.2s ease-in-out infinite 0.8s; }
+  @keyframes p1 { 0%,100%{transform:translateY(0)} 50%{transform:translateY(16px)} }
+  @keyframes p2 { 0%,100%{transform:translateY(10px)} 50%{transform:translateY(-5px)} }
+  @keyframes p3 { 0%,100%{transform:translateY(5px)} 50%{transform:translateY(20px)} }
+  .spin-c { animation: spn 0.7s linear infinite; transform-origin: 115px 286px; }
+  .spin-t { animation: spn 0.7s linear infinite reverse; transform-origin: 115px 326px; }
+  @keyframes spn { to { transform:rotate(360deg); } }
+  .leak-puff { animation: puff 1.3s ease-in-out infinite; }
+  @keyframes puff { 0%,100%{opacity:0;transform:scale(0.5) translate(0,0)} 60%{opacity:0.8;transform:scale(1.4) translate(3px,-10px)} }
+  .ef-wave { animation: wave 2s ease-in-out infinite; }
+  @keyframes wave { 0%,100%{opacity:0.3} 50%{opacity:0.9} }
+}
+.zone-btn { cursor:pointer; font-size:12px; font-weight:500; border:none; border-radius:6px; padding:6px 14px; transition:opacity 0.2s; }
+.zone-btn:hover { opacity:0.8; }
+.sim-btn { cursor:pointer; font-size:12px; font-weight:500; border:none; border-radius:6px; padding:7px 16px; }
+.out-badge { display:inline-flex; align-items:center; gap:6px; padding:5px 12px; border-radius:6px; font-size:12px; font-weight:500; }
+</style>
+
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center">
+  <span style="font-size:12px;color:var(--color-text-secondary);margin-right:4px">Show twin overlay:</span>
+  <button class="zone-btn" id="btn1" style="background:#0a2a1a;color:#5DCAA5;border:1px solid #1D9E75" onclick="toggleTwin(1)">Twin 1 — Intake</button>
+  <button class="zone-btn" id="btn2" style="background:#1a3a5a;color:#85B7EB;border:1px solid #378ADD" onclick="toggleTwin(2)">Twin 2 — Charge air</button>
+  <button class="zone-btn" id="btn3" style="background:#3a1a0a;color:#f09595;border:1px solid #E24B4A" onclick="toggleTwin(3)">Twin 3 — Exhaust</button>
+  <button class="zone-btn" id="btnAll" style="background:#26215C;color:#CECBF6;border:1px solid #7F77DD;margin-left:auto" onclick="toggleAll()">All twins</button>
+</div>
+
+<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;align-items:center">
+  <span style="font-size:12px;color:var(--color-text-secondary);margin-right:4px">Simulate leak:</span>
+  <button class="sim-btn" id="simA" style="background:#0a3a5a;color:#85B7EB;border:1px solid #378ADD" onclick="simLeak('A')">Zone A</button>
+  <button class="sim-btn" id="simB" style="background:#0a3a5a;color:#85B7EB;border:1px solid #378ADD" onclick="simLeak('B')">Zone B</button>
+  <button class="sim-btn" id="simC" style="background:#0a2a1a;color:#5DCAA5;border:1px solid #1D9E75" onclick="simLeak('C')">Zone C</button>
+  <button class="sim-btn" id="simD" style="background:#3a1a0a;color:#f09595;border:1px solid #E24B4A" onclick="simLeak('D')">Zone D</button>
+  <button class="sim-btn" id="simE" style="background:#3a1a0a;color:#f09595;border:1px solid #E24B4A" onclick="simLeak('E')">Zone E</button>
+  <button class="sim-btn" style="background:#2a2820;color:#888780;border:1px solid #5a5850;margin-left:auto" onclick="clearLeak()">Clear</button>
+</div>
+
+<svg id="eng" width="100%" viewBox="0 0 680 580" xmlns="http://www.w3.org/2000/svg">
+<defs>
+  <marker id="arr" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="5" markerHeight="5" orient="auto-start-reverse">
+    <path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+  </marker>
+  <clipPath id="blkclip"><rect x="196" y="228" width="272" height="190"/></clipPath>
+</defs>
+
+<!-- ═══ ENGINE BLOCK ═══ -->
+<rect x="196" y="228" width="272" height="190" rx="8" fill="#6a6860" stroke="#4a4840" stroke-width="2"/>
+<rect x="204" y="236" width="256" height="5" rx="1" fill="#5a5850" opacity="0.7"/>
+<rect x="204" y="408" width="256" height="5" rx="1" fill="#4a4840" opacity="0.7"/>
+
+<!-- Cylinder bores -->
+<rect x="212" y="240" width="66" height="158" rx="4" fill="#4a4840" stroke="#3a3830" stroke-width="1.2"/>
+<rect x="303" y="240" width="66" height="158" rx="4" fill="#4a4840" stroke="#3a3830" stroke-width="1.2"/>
+<rect x="394" y="240" width="66" height="158" rx="4" fill="#4a4840" stroke="#3a3830" stroke-width="1.2"/>
+
+<!-- Pistons -->
+<g class="p1a"><rect x="220" y="326" width="50" height="26" rx="3" fill="#b8b5ac" stroke="#888780" stroke-width="1"/><line x1="245" y1="352" x2="245" y2="380" stroke="#888780" stroke-width="3.5" stroke-linecap="round"/></g>
+<g class="p2a"><rect x="311" y="314" width="50" height="26" rx="3" fill="#b8b5ac" stroke="#888780" stroke-width="1"/><line x1="336" y1="340" x2="336" y2="380" stroke="#888780" stroke-width="3.5" stroke-linecap="round"/></g>
+<g class="p3a"><rect x="402" y="336" width="50" height="26" rx="3" fill="#b8b5ac" stroke="#888780" stroke-width="1"/><line x1="427" y1="362" x2="427" y2="380" stroke="#888780" stroke-width="3.5" stroke-linecap="round"/></g>
+
+<!-- Crankshaft -->
+<rect x="204" y="392" width="256" height="18" rx="4" fill="#4a4840" stroke="#3a3830" stroke-width="1"/>
+<ellipse cx="245" cy="401" rx="11" ry="7" fill="#7a7870" stroke="#4a4840" stroke-width="1"/>
+<ellipse cx="336" cy="401" rx="11" ry="7" fill="#7a7870" stroke="#4a4840" stroke-width="1"/>
+<ellipse cx="427" cy="401" rx="11" ry="7" fill="#7a7870" stroke="#4a4840" stroke-width="1"/>
+
+<!-- Oil sump -->
+<rect x="208" y="418" width="248" height="24" rx="5" fill="#3a3830" stroke="#2a2820" stroke-width="1"/>
+<text class="ts" x="332" y="434" text-anchor="middle" fill="#7a7870">Oil sump</text>
+
+<!-- ═══ CYLINDER HEAD ═══ -->
+<rect x="196" y="188" width="272" height="42" rx="6" fill="#7a7870" stroke="#4a4840" stroke-width="1.5"/>
+<ellipse cx="216" cy="209" rx="5" ry="5" fill="#4a4840" stroke="#3a3830" stroke-width="0.8"/>
+<ellipse cx="270" cy="209" rx="5" ry="5" fill="#4a4840" stroke="#3a3830" stroke-width="0.8"/>
+<ellipse cx="332" cy="209" rx="5" ry="5" fill="#4a4840" stroke="#3a3830" stroke-width="0.8"/>
+<ellipse cx="394" cy="209" rx="5" ry="5" fill="#4a4840" stroke="#3a3830" stroke-width="0.8"/>
+<ellipse cx="450" cy="209" rx="5" ry="5" fill="#4a4840" stroke="#3a3830" stroke-width="0.8"/>
+
+<!-- Intake valves (blue) -->
+<ellipse cx="228" cy="228" rx="7" ry="4" fill="#5a9aba" stroke="#2a6a8a" stroke-width="0.8"/>
+<ellipse cx="315" cy="228" rx="7" ry="4" fill="#5a9aba" stroke="#2a6a8a" stroke-width="0.8"/>
+<ellipse cx="402" cy="228" rx="7" ry="4" fill="#5a9aba" stroke="#2a6a8a" stroke-width="0.8"/>
+<!-- Exhaust valves (orange) -->
+<ellipse cx="250" cy="228" rx="7" ry="4" fill="#c07840" stroke="#905820" stroke-width="0.8"/>
+<ellipse cx="337" cy="228" rx="7" ry="4" fill="#c07840" stroke="#905820" stroke-width="0.8"/>
+<ellipse cx="424" cy="228" rx="7" ry="4" fill="#c07840" stroke="#905820" stroke-width="0.8"/>
+
+<!-- ═══ INTAKE MANIFOLD ═══ -->
+<rect x="196" y="142" width="272" height="48" rx="6" fill="#1a5a3a" stroke="#0a4a2a" stroke-width="1.5"/>
+<line x1="215" y1="152" x2="215" y2="182" stroke="#2a7a5a" stroke-width="0.8"/>
+<line x1="240" y1="152" x2="240" y2="182" stroke="#2a7a5a" stroke-width="0.8"/>
+<line x1="265" y1="152" x2="265" y2="182" stroke="#2a7a5a" stroke-width="0.8"/>
+<line x1="290" y1="152" x2="290" y2="182" stroke="#2a7a5a" stroke-width="0.8"/>
+<line x1="315" y1="152" x2="315" y2="182" stroke="#2a7a5a" stroke-width="0.8"/>
+<line x1="340" y1="152" x2="340" y2="182" stroke="#2a7a5a" stroke-width="0.8"/>
+<line x1="365" y1="152" x2="365" y2="182" stroke="#2a7a5a" stroke-width="0.8"/>
+<line x1="390" y1="152" x2="390" y2="182" stroke="#2a7a5a" stroke-width="0.8"/>
+<line x1="415" y1="152" x2="415" y2="182" stroke="#2a7a5a" stroke-width="0.8"/>
+<line x1="440" y1="152" x2="440" y2="182" stroke="#2a7a5a" stroke-width="0.8"/>
+<line x1="460" y1="152" x2="460" y2="182" stroke="#2a7a5a" stroke-width="0.8"/>
+<text class="th" x="332" y="165" text-anchor="middle" fill="#9FE1CB">Intake manifold</text>
+<text class="ts" x="332" y="181" text-anchor="middle" fill="#5DCAA5">Charge air → intake ports</text>
+
+<!-- Intake runners to valves -->
+<rect x="222" y="188" width="12" height="14" rx="2" fill="#2a8a5a" stroke="#0a5a3a" stroke-width="0.8"/>
+<rect x="309" y="188" width="12" height="14" rx="2" fill="#2a8a5a" stroke="#0a5a3a" stroke-width="0.8"/>
+<rect x="396" y="188" width="12" height="14" rx="2" fill="#2a8a5a" stroke="#0a5a3a" stroke-width="0.8"/>
+
+<!-- ═══ CAC ═══ -->
+<rect x="196" y="54" width="272" height="52" rx="7" fill="#1a3a5a" stroke="#0a2a4a" stroke-width="1.5"/>
+<line x1="216" y1="64" x2="216" y2="98" stroke="#2a5a8a" stroke-width="0.9"/>
+<line x1="234" y1="64" x2="234" y2="98" stroke="#2a5a8a" stroke-width="0.9"/>
+<line x1="252" y1="64" x2="252" y2="98" stroke="#2a5a8a" stroke-width="0.9"/>
+<line x1="270" y1="64" x2="270" y2="98" stroke="#2a5a8a" stroke-width="0.9"/>
+<line x1="288" y1="64" x2="288" y2="98" stroke="#2a5a8a" stroke-width="0.9"/>
+<line x1="306" y1="64" x2="306" y2="98" stroke="#2a5a8a" stroke-width="0.9"/>
+<line x1="324" y1="64" x2="324" y2="98" stroke="#2a5a8a" stroke-width="0.9"/>
+<line x1="342" y1="64" x2="342" y2="98" stroke="#2a5a8a" stroke-width="0.9"/>
+<line x1="360" y1="64" x2="360" y2="98" stroke="#2a5a8a" stroke-width="0.9"/>
+<line x1="378" y1="64" x2="378" y2="98" stroke="#2a5a8a" stroke-width="0.9"/>
+<line x1="396" y1="64" x2="396" y2="98" stroke="#2a5a8a" stroke-width="0.9"/>
+<line x1="414" y1="64" x2="414" y2="98" stroke="#2a5a8a" stroke-width="0.9"/>
+<line x1="432" y1="64" x2="432" y2="98" stroke="#2a5a8a" stroke-width="0.9"/>
+<line x1="450" y1="64" x2="450" y2="98" stroke="#2a5a8a" stroke-width="0.9"/>
+<text class="th" x="332" y="74" text-anchor="middle" fill="#85B7EB">Charge air cooler (CAC)</text>
+<text class="ts" x="332" y="89" text-anchor="middle" fill="#4a8aba">Intercooler — cools compressed air</text>
+
+<!-- ═══ AIRFLOW METER ═══ -->
+<rect x="22" y="176" width="72" height="54" rx="7" fill="#0a2a4a" stroke="#1a4a7a" stroke-width="1.2"/>
+<rect x="34" y="188" width="48" height="8" rx="2" fill="#3a6a9a" opacity="0.8"/>
+<rect x="34" y="202" width="48" height="8" rx="2" fill="#3a6a9a" opacity="0.5"/>
+<rect x="34" y="216" width="48" height="8" rx="2" fill="#3a6a9a" opacity="0.3"/>
+<text class="ts" x="58" y="242" text-anchor="middle" fill="#7ab8d8">MAF sensor</text>
+<text class="th" x="58" y="256" text-anchor="middle" fill="#4a8aba">Airflow meter</text>
+
+<!-- ═══ TURBOCHARGER ═══ -->
+<ellipse cx="115" cy="306" rx="62" ry="62" fill="#5a5850" stroke="#3a3830" stroke-width="2"/>
+<ellipse cx="115" cy="306" rx="50" ry="50" fill="#4a4840" stroke="#2a2820" stroke-width="1"/>
+<ellipse cx="115" cy="286" rx="34" ry="22" fill="#1a4a7a" stroke="#0a2a5a" stroke-width="1"/>
+<ellipse cx="115" cy="326" rx="34" ry="20" fill="#6a2a1a" stroke="#4a1a0a" stroke-width="1"/>
+<line x1="62" y1="306" x2="168" y2="306" stroke="#2a2820" stroke-width="2"/>
+<g class="spin-c">
+  <line x1="115" y1="270" x2="115" y2="282" stroke="#5a9aba" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="103" y1="274" x2="111" y2="282" stroke="#5a9aba" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="127" y1="274" x2="119" y2="282" stroke="#5a9aba" stroke-width="2.5" stroke-linecap="round"/>
+</g>
+<g class="spin-t">
+  <line x1="115" y1="320" x2="115" y2="332" stroke="#c07840" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="103" y1="322" x2="111" y2="330" stroke="#c07840" stroke-width="2.5" stroke-linecap="round"/>
+  <line x1="127" y1="322" x2="119" y2="330" stroke="#c07840" stroke-width="2.5" stroke-linecap="round"/>
+</g>
+<text class="ts" x="115" y="289" text-anchor="middle" fill="#9ac8e8">Comp.</text>
+<text class="ts" x="115" y="330" text-anchor="middle" fill="#e0a070">Turbine</text>
+<text class="th" x="115" y="384" text-anchor="middle" fill="#5a5850">Turbocharger</text>
+
+<!-- ═══ EXHAUST MANIFOLD ═══ -->
+<rect x="196" y="448" width="272" height="42" rx="6" fill="#6a2a0a" stroke="#4a1a00" stroke-width="1.5"/>
+<text class="th" x="332" y="466" text-anchor="middle" fill="#f0c090">Exhaust manifold</text>
+<text class="ts" x="332" y="481" text-anchor="middle" fill="#c09060">Hot exhaust collected</text>
+
+<!-- Exhaust ports -->
+<rect x="238" y="418" width="14" height="32" rx="2" fill="#b06830" stroke="#804820" stroke-width="0.8"/>
+<rect x="322" y="418" width="14" height="32" rx="2" fill="#b06830" stroke="#804820" stroke-width="0.8"/>
+<rect x="410" y="418" width="14" height="32" rx="2" fill="#b06830" stroke="#804820" stroke-width="0.8"/>
+
+<!-- ═══ AFTERTREATMENT ═══ -->
+<rect x="502" y="260" width="68" height="42" rx="6" fill="#4a2a08" stroke="#2a1a00" stroke-width="1.2"/>
+<line x1="514" y1="270" x2="558" y2="270" stroke="#7a5a20" stroke-width="0.8"/>
+<line x1="514" y1="280" x2="558" y2="280" stroke="#7a5a20" stroke-width="0.8"/>
+<line x1="514" y1="290" x2="558" y2="290" stroke="#7a5a20" stroke-width="0.8"/>
+<text class="th" x="536" y="312" text-anchor="middle" fill="#5a5850">DOC</text>
+
+<rect x="502" y="324" width="68" height="42" rx="6" fill="#5a3a10" stroke="#3a2000" stroke-width="1.2"/>
+<rect x="514" y="334" width="10" height="24" rx="2" fill="#8a6030" opacity="0.8"/>
+<rect x="528" y="334" width="10" height="24" rx="2" fill="#8a6030" opacity="0.8"/>
+<rect x="542" y="334" width="10" height="24" rx="2" fill="#8a6030" opacity="0.8"/>
+<text class="th" x="536" y="376" text-anchor="middle" fill="#5a5850">DPF</text>
+
+<rect x="502" y="390" width="68" height="42" rx="6" fill="#3a4a10" stroke="#2a3000" stroke-width="1.2"/>
+<line x1="514" y1="400" x2="558" y2="400" stroke="#6a7a30" stroke-width="0.8"/>
+<line x1="514" y1="410" x2="558" y2="410" stroke="#6a7a30" stroke-width="0.8"/>
+<line x1="514" y1="420" x2="558" y2="420" stroke="#6a7a30" stroke-width="0.8"/>
+<text class="th" x="536" y="442" text-anchor="middle" fill="#5a5850">SCR</text>
+
+<!-- Tailpipe -->
+<rect x="512" y="450" width="50" height="20" rx="4" fill="#4a4840" stroke="#3a3830" stroke-width="1"/>
+<text class="ts" x="537" y="464" text-anchor="middle" fill="#888780">Tailpipe</text>
+
+<!-- ═══ FLOW PATHS ═══ -->
+<!-- Fresh air: MAF → turbo compressor -->
+<path d="M94 200 L80 200 L80 268" fill="none" stroke="#3a8aca" stroke-width="2.5" class="flow-air" marker-end="url(#arr)"/>
+<!-- Hot compressed: turbo → CAC -->
+<path d="M115 244 L115 80 L196 80" fill="none" stroke="#c07840" stroke-width="3" class="flow-hot" marker-end="url(#arr)"/>
+<!-- Cooled air: CAC → intake manifold -->
+<path d="M332 106 L332 142" fill="none" stroke="#2a9a6a" stroke-width="3" class="flow-air" marker-end="url(#arr)"/>
+<!-- Exhaust mani → turbo turbine -->
+<path d="M196 469 L115 469 L115 368" fill="none" stroke="#c03020" stroke-width="3" class="flow-exh" marker-end="url(#arr)"/>
+<!-- Turbine → DOC -->
+<path d="M167 326 L468 326 L468 281 L502 281" fill="none" stroke="#c03020" stroke-width="2.5" class="flow-exh" marker-end="url(#arr)"/>
+<!-- DOC→DPF→SCR→tail -->
+<path d="M536 302 L536 324" fill="none" stroke="#9a4010" stroke-width="2" class="flow-exh" marker-end="url(#arr)"/>
+<path d="M536 366 L536 390" fill="none" stroke="#9a4010" stroke-width="2" class="flow-exh" marker-end="url(#arr)"/>
+<path d="M536 432 L536 450" fill="none" stroke="#6a6860" stroke-width="2" class="flow-exh" marker-end="url(#arr)"/>
+
+<!-- ═══ TWIN OVERLAYS (shown/hidden by JS) ═══ -->
+<!-- Twin 1 Zone A: MAF → compressor -->
+<rect id="z1" x="18" y="148" width="160" height="138" rx="8" fill="#1D9E75" opacity="0" stroke="#1D9E75" stroke-width="1.5" stroke-dasharray="6 3" pointer-events="none"/>
+<!-- Twin 2 Zone B+C: hot pipe + CAC + intake manifold -->
+<rect id="z2" x="96" y="48" width="380" height="148" rx="8" fill="#378ADD" opacity="0" stroke="#378ADD" stroke-width="1.5" stroke-dasharray="6 3" pointer-events="none"/>
+<!-- Twin 3 Zone D+E: exhaust manifold + turbine out + aftertreatment -->
+<rect id="z3" x="96" y="440" width="490" height="80" rx="8" fill="#E24B4A" opacity="0" stroke="#E24B4A" stroke-width="1.5" stroke-dasharray="6 3" pointer-events="none"/>
+
+<!-- LEAK INDICATORS (hidden by default) -->
+<g id="leak-A" opacity="0" pointer-events="none">
+  <circle class="leak-puff" cx="80" cy="190" r="9" fill="#E24B4A"/>
+  <circle class="leak-puff" cx="70" cy="178" r="6" fill="#E24B4A" style="animation-delay:0.4s"/>
+  <text class="ts" x="58" y="168" text-anchor="middle" fill="#E24B4A">Leak A</text>
+</g>
+<g id="leak-B" opacity="0" pointer-events="none">
+  <circle class="leak-puff" cx="115" cy="158" r="9" fill="#E24B4A"/>
+  <circle class="leak-puff" cx="128" cy="146" r="6" fill="#E24B4A" style="animation-delay:0.5s"/>
+  <text class="ts" x="130" y="136" text-anchor="middle" fill="#E24B4A">Leak B</text>
+</g>
+<g id="leak-C" opacity="0" pointer-events="none">
+  <circle class="leak-puff" cx="332" cy="120" r="9" fill="#E24B4A"/>
+  <circle class="leak-puff" cx="348" cy="110" r="6" fill="#E24B4A" style="animation-delay:0.3s"/>
+  <text class="ts" x="360" y="102" text-anchor="middle" fill="#E24B4A">Leak C</text>
+</g>
+<g id="leak-D" opacity="0" pointer-events="none">
+  <circle class="leak-puff" cx="250" cy="450" r="9" fill="#E24B4A"/>
+  <circle class="leak-puff" cx="263" cy="440" r="6" fill="#E24B4A" style="animation-delay:0.6s"/>
+  <text class="ts" x="275" y="432" text-anchor="middle" fill="#E24B4A">Leak D</text>
+</g>
+<g id="leak-E" opacity="0" pointer-events="none">
+  <circle class="leak-puff" cx="468" cy="308" r="9" fill="#E24B4A"/>
+  <circle class="leak-puff" cx="480" cy="296" r="6" fill="#E24B4A" style="animation-delay:0.45s"/>
+  <text class="ts" x="492" y="288" text-anchor="middle" fill="#E24B4A">Leak E</text>
+</g>
+
+<!-- ENERGY FIELD residual wave (shown during leak) -->
+<g id="ef-wave" opacity="0" pointer-events="none">
+  <rect x="196" y="510" width="272" height="32" rx="6" fill="#26215C" stroke="#7F77DD" stroke-width="1"/>
+  <text class="ts" x="332" y="521" text-anchor="middle" fill="#CECBF6" class="ef-wave">Energy field deviation detected</text>
+  <text class="ts" x="332" y="535" text-anchor="middle" fill="#AFA9EC" class="ef-wave">Residual exceeds threshold — leak flagged</text>
+</g>
+
+<!-- CALLOUT LABELS -->
+<line x1="468" y1="209" x2="570" y2="176" stroke="#5a5850" stroke-width="0.5" stroke-dasharray="3 2"/>
+<circle cx="468" cy="209" r="2.5" fill="#5a5850"/>
+<text class="ts" x="574" y="180" fill="#5a5850">Cylinder head</text>
+
+<line x1="468" y1="326" x2="570" y2="316" stroke="#5a5850" stroke-width="0.5" stroke-dasharray="3 2"/>
+<circle cx="468" cy="326" r="2.5" fill="#5a5850"/>
+<text class="ts" x="574" y="320" fill="#5a5850">Pistons</text>
+
+<line x1="468" y1="401" x2="570" y2="390" stroke="#5a5850" stroke-width="0.5" stroke-dasharray="3 2"/>
+<circle cx="468" cy="401" r="2.5" fill="#5a5850"/>
+<text class="ts" x="574" y="394" fill="#5a5850">Crankshaft</text>
+
+</svg>
+
+<!-- OUTPUT PANEL -->
+<div id="out-panel" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px;padding:10px;border-radius:8px;border:1px solid #2a2820;background:#1a1a18;min-height:44px;align-items:center">
+  <span style="font-size:12px;color:#5a5850">LeakSense output:</span>
+  <span id="out-flag" class="out-badge" style="background:#2a2820;color:#5a5850;border:1px solid #3a3830">Flag: —</span>
+  <span id="out-conf" class="out-badge" style="background:#2a2820;color:#5a5850;border:1px solid #3a3830">Confidence: —</span>
+  <span id="out-loc"  class="out-badge" style="background:#2a2820;color:#5a5850;border:1px solid #3a3830">Zone: —</span>
+  <span id="out-act"  class="out-badge" style="background:#2a2820;color:#5a5850;border:1px solid #3a3830">Action: —</span>
+</div>
+
+<script>
+const twinState = {1:false, 2:false, 3:false};
+const twinIds = {1:'z1', 2:'z2', 3:'z3'};
+const twinColors = {1:'#1D9E75', 2:'#378ADD', 3:'#E24B4A'};
+const btnIds = {1:'btn1', 2:'btn2', 3:'btn3'};
+
+function toggleTwin(n) {
+  twinState[n] = !twinState[n];
+  const el = document.getElementById(twinIds[n]);
+  el.style.opacity = twinState[n] ? '0.12' : '0';
+  const btn = document.getElementById(btnIds[n]);
+  btn.style.outline = twinState[n] ? '2px solid ' + twinColors[n] : 'none';
+}
+function toggleAll() {
+  const anyOn = Object.values(twinState).some(v => v);
+  [1,2,3].forEach(n => { if(anyOn === twinState[n]) toggleTwin(n); });
+}
+
+const leakData = {
+  A: { twin:'Twin 1 — Intake', flag:'FAIL', conf:'91%', loc:'Zone A', act:'Inspect MAF–compressor pipe', color:'#378ADD' },
+  B: { twin:'Twin 2 — Charge air', flag:'FAIL', conf:'88%', loc:'Zone B', act:'Check compressor–CAC hose', color:'#378ADD' },
+  C: { twin:'Twin 2 — Charge air', flag:'FAIL', conf:'93%', loc:'Zone C', act:'Inspect CAC–manifold joint', color:'#1D9E75' },
+  D: { twin:'Twin 3 — Exhaust', flag:'FAIL', conf:'87%', loc:'Zone D', act:'Check exhaust manifold gasket', color:'#E24B4A' },
+  E: { twin:'Twin 3 — Exhaust', flag:'FAIL', conf:'90%', loc:'Zone E', act:'Inspect turbine–DOC pipe', color:'#E24B4A' },
+};
+
+let activeLeak = null;
+function simLeak(zone) {
+  clearLeak();
+  activeLeak = zone;
+  document.getElementById('leak-'+zone).style.opacity = '1';
+  document.getElementById('ef-wave').style.opacity = '1';
+  const d = leakData[zone];
+  document.getElementById('out-flag').textContent = 'Flag: ' + d.flag;
+  document.getElementById('out-flag').style.cssText = 'background:#3a0a0a;color:#f09595;border:1px solid #E24B4A;display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:6px;font-size:12px;font-weight:500';
+  document.getElementById('out-conf').textContent = 'Confidence: ' + d.conf;
+  document.getElementById('out-conf').style.cssText = 'background:#2a1a0a;color:#FAC775;border:1px solid #f5a800;display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:6px;font-size:12px;font-weight:500';
+  document.getElementById('out-loc').textContent = 'Zone: ' + d.loc;
+  document.getElementById('out-loc').style.cssText = 'background:#0a2a1a;color:#5DCAA5;border:1px solid #1D9E75;display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:6px;font-size:12px;font-weight:500';
+  document.getElementById('out-act').textContent = 'Action: ' + d.act;
+  document.getElementById('out-act').style.cssText = 'background:#26215C;color:#CECBF6;border:1px solid #7F77DD;display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:6px;font-size:12px;font-weight:500';
+}
+function clearLeak() {
+  ['A','B','C','D','E'].forEach(z => { document.getElementById('leak-'+z).style.opacity = '0'; });
+  document.getElementById('ef-wave').style.opacity = '0';
+  activeLeak = null;
+  ['out-flag','out-conf','out-loc','out-act'].forEach(id => {
+    const el = document.getElementById(id);
+    el.style.cssText = 'background:#2a2820;color:#5a5850;border:1px solid #3a3830;display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:6px;font-size:12px;font-weight:500';
+  });
+  document.getElementById('out-flag').textContent = 'Flag: —';
+  document.getElementById('out-conf').textContent = 'Confidence: —';
+  document.getElementById('out-loc').textContent = 'Zone: —';
+  document.getElementById('out-act').textContent = 'Action: —';
+}
+</script>

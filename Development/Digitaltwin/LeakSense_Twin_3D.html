@@ -1,0 +1,1494 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>LeakSense Twin — Cat C18 ACERT Digital Twin</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;500;600;700;900&family=Share+Tech+Mono&family=Exo+2:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --ink:#04080f;--panel:#070d18;--glass:rgba(8,16,32,0.82);
+  --border:rgba(40,80,140,0.35);--border2:rgba(60,120,200,0.25);
+  --gold:#F5C518;--gold2:#d4a70e;--gold-glow:rgba(245,197,24,0.18);
+  --teal:#00E5C8;--teal2:#00b89e;--teal-glow:rgba(0,229,200,0.15);
+  --blue:#2196F3;--blue2:#1565C0;--blue-glow:rgba(33,150,243,0.2);
+  --red:#FF3B3B;--red2:#cc0000;--red-glow:rgba(255,59,59,0.2);
+  --orange:#FF6D00;--orng-glow:rgba(255,109,0,0.2);
+  --text:#C8D8F0;--muted:#506080;--bright:#E8F4FF;
+  --z1:#00E5C8;--z2:#2196F3;--z3:#FF6D00;
+  --scanline:repeating-linear-gradient(0deg,transparent,transparent 2px,rgba(0,180,255,0.015) 2px,rgba(0,180,255,0.015) 4px);
+}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--ink);font-family:'Exo 2',sans-serif;color:var(--text);cursor:crosshair}
+
+/* ── CANVAS LAYER ── */
+#cvs{position:fixed;inset:0;z-index:0}
+
+/* ── SCANLINE OVERLAY ── */
+#scanline{position:fixed;inset:0;pointer-events:none;z-index:1;background:var(--scanline);animation:scanMove 8s linear infinite;opacity:.5}
+@keyframes scanMove{0%{background-position:0 0}100%{background-position:0 100%}}
+
+/* ── VIGNETTE ── */
+#vignette{position:fixed;inset:0;pointer-events:none;z-index:2;background:radial-gradient(ellipse 80% 70% at 50% 50%,transparent 30%,rgba(2,6,14,0.7) 100%)}
+
+/* ── TOP BAR ── */
+#topbar{
+  position:fixed;top:0;left:0;right:0;height:58px;z-index:20;
+  background:var(--glass);border-bottom:1px solid var(--border);
+  backdrop-filter:blur(20px);
+  display:flex;align-items:center;padding:0 20px;gap:16px;
+}
+.tb-logo{display:flex;align-items:center;gap:10px}
+.tb-cat{background:var(--gold);color:#000;font-family:'Orbitron',monospace;font-weight:900;font-size:12px;padding:4px 8px;border-radius:2px;letter-spacing:.12em}
+.tb-name{font-family:'Orbitron',monospace;font-size:14px;font-weight:700;letter-spacing:.15em;color:var(--bright);text-shadow:0 0 20px rgba(200,220,255,0.4)}
+.tb-model{font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--muted);letter-spacing:.08em}
+.tb-sep{width:1px;height:32px;background:var(--border2);flex-shrink:0}
+
+.status-badge{
+  display:flex;align-items:center;gap:7px;padding:5px 14px;border-radius:20px;
+  border:1px solid;font-family:'Orbitron',monospace;font-size:10px;font-weight:600;letter-spacing:.1em;
+  transition:all .4s;cursor:default;
+}
+.sb-healthy{background:var(--teal-glow);border-color:rgba(0,229,200,.45);color:var(--teal)}
+.sb-leak{background:var(--red-glow);border-color:rgba(255,59,59,.55);color:var(--red)}
+.sb-dot{width:7px;height:7px;border-radius:50%}
+.sb-healthy .sb-dot{background:var(--teal);box-shadow:0 0 8px var(--teal);animation:dotBlink 2s ease-in-out infinite}
+.sb-leak .sb-dot{background:var(--red);box-shadow:0 0 10px var(--red);animation:dotBlink .5s ease-in-out infinite}
+@keyframes dotBlink{0%,100%{opacity:1}50%{opacity:.25}}
+
+.tb-metrics{display:flex;gap:0;margin-left:auto}
+.tb-metric{padding:0 18px;border-left:1px solid var(--border2);text-align:center}
+.tb-metric:first-child{border-left:none}
+.tbm-val{font-family:'Orbitron',monospace;font-size:16px;font-weight:700;color:var(--gold);text-shadow:0 0 12px var(--gold-glow);transition:color .3s}
+.tbm-lbl{font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:.1em;margin-top:1px}
+
+/* ── LEFT PANEL ── */
+#lpanel{
+  position:fixed;top:58px;left:0;bottom:0;width:240px;z-index:20;
+  background:var(--glass);border-right:1px solid var(--border);
+  backdrop-filter:blur(20px);overflow-y:auto;padding:14px 12px;
+  display:flex;flex-direction:column;gap:10px;
+}
+#lpanel::-webkit-scrollbar{width:3px}
+#lpanel::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+
+.lp-sec-title{
+  font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:.18em;
+  color:var(--muted);text-transform:uppercase;padding:0 3px;margin-bottom:2px;
+  display:flex;align-items:center;gap:6px;
+}
+.lp-sec-title::before{content:'';flex:1;height:1px;background:var(--border2)}
+.lp-sec-title::after{content:'';flex:3;height:1px;background:var(--border2)}
+
+/* Zone cards */
+.zone-card{
+  border:1px solid var(--border2);border-radius:6px;padding:10px 12px;
+  cursor:pointer;transition:all .25s;position:relative;overflow:hidden;
+  background:rgba(10,20,40,0.5);
+}
+.zone-card::before{content:'';position:absolute;left:0;top:0;bottom:0;width:3px;border-radius:3px 0 0 3px;transition:all .25s}
+.zc1::before{background:var(--z1);box-shadow:0 0 8px var(--z1)}
+.zc2::before{background:var(--z2);box-shadow:0 0 8px var(--z2)}
+.zc3::before{background:var(--z3);box-shadow:0 0 8px var(--z3)}
+.zone-card:hover{border-color:rgba(100,160,255,.4);background:rgba(15,30,60,.6);transform:translateX(2px)}
+.zone-card.act.zc1{background:rgba(0,229,200,.07);border-color:rgba(0,229,200,.5);box-shadow:inset 0 0 20px rgba(0,229,200,.05)}
+.zone-card.act.zc2{background:rgba(33,150,243,.07);border-color:rgba(33,150,243,.5);box-shadow:inset 0 0 20px rgba(33,150,243,.05)}
+.zone-card.act.zc3{background:rgba(255,109,0,.07);border-color:rgba(255,109,0,.5);box-shadow:inset 0 0 20px rgba(255,109,0,.05)}
+.zn-name{font-family:'Orbitron',monospace;font-size:10px;font-weight:700;letter-spacing:.08em;margin-bottom:3px}
+.zc1 .zn-name{color:var(--z1)}
+.zc2 .zn-name{color:var(--z2)}
+.zc3 .zn-name{color:var(--z3)}
+.zn-desc{font-size:10px;color:var(--muted);line-height:1.4}
+.zn-status{font-family:'Share Tech Mono',monospace;font-size:9px;margin-top:5px;letter-spacing:.06em}
+.zs-ok{color:var(--teal)}.zs-bad{color:var(--red);animation:dotBlink .8s infinite}
+
+/* Leak buttons */
+.leak-grid{display:grid;grid-template-columns:1fr 1fr;gap:5px}
+.lk-btn{
+  padding:9px 6px;border-radius:5px;background:rgba(10,20,40,0.6);
+  border:1px solid var(--border2);color:var(--muted);
+  font-family:'Orbitron',monospace;font-size:9px;font-weight:600;
+  letter-spacing:.06em;cursor:pointer;transition:all .2s;text-align:center;line-height:1.4;
+}
+.lk-btn:hover{border-color:rgba(255,109,0,.6);color:var(--orange);background:rgba(255,109,0,.08);transform:scale(1.02)}
+.lk-btn.act{border-color:var(--red);color:var(--red);background:rgba(255,59,59,.12);box-shadow:0 0 12px rgba(255,59,59,.2)}
+.lk-sub{font-family:'Share Tech Mono',monospace;font-size:8px;opacity:.6;font-weight:400;display:block;margin-top:2px}
+
+/* Sliders */
+.ctrl-row{display:flex;align-items:center;gap:8px}
+.ctrl-lbl{font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);min-width:52px;letter-spacing:.06em}
+.ctrl-slider{
+  flex:1;-webkit-appearance:none;height:3px;background:var(--border2);
+  border-radius:2px;outline:none;cursor:pointer;
+}
+.ctrl-slider::-webkit-slider-thumb{
+  -webkit-appearance:none;width:14px;height:14px;border-radius:50%;
+  background:var(--gold);box-shadow:0 0 8px var(--gold-glow);cursor:pointer;
+  border:2px solid rgba(245,197,24,.3);
+}
+.ctrl-val{font-family:'Orbitron',monospace;font-size:10px;color:var(--gold);min-width:38px;text-align:right}
+
+/* Camera grid */
+.cam-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
+.cam-btn{
+  padding:7px 3px;border-radius:4px;background:rgba(10,20,40,0.5);
+  border:1px solid var(--border2);color:var(--muted);
+  font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:.06em;
+  cursor:pointer;transition:all .15s;text-align:center;
+}
+.cam-btn:hover{border-color:var(--gold);color:var(--gold);background:var(--gold-glow)}
+.cam-btn.cam-act{border-color:var(--gold);color:var(--gold);background:var(--gold-glow);box-shadow:0 0 8px var(--gold-glow)}
+
+.clear-btn{
+  padding:10px;border-radius:5px;background:rgba(255,59,59,.06);
+  border:1px solid rgba(255,59,59,.25);color:rgba(255,100,100,.7);
+  font-family:'Orbitron',monospace;font-size:9px;letter-spacing:.1em;
+  cursor:pointer;transition:all .2s;width:100%;
+}
+.clear-btn:hover{background:rgba(255,59,59,.12);border-color:var(--red);color:var(--red);box-shadow:0 0 12px rgba(255,59,59,.15)}
+
+/* ── RIGHT PANEL ── */
+#rpanel{
+  position:fixed;top:58px;right:0;bottom:0;width:260px;z-index:20;
+  background:var(--glass);border-left:1px solid var(--border);
+  backdrop-filter:blur(20px);overflow-y:auto;padding:14px 12px;
+  display:flex;flex-direction:column;gap:10px;
+}
+#rpanel::-webkit-scrollbar{width:3px}
+#rpanel::-webkit-scrollbar-thumb{background:var(--border2);border-radius:2px}
+
+/* Go/NoGo */
+#gonogo{
+  border-radius:8px;padding:14px;text-align:center;border:1px solid;
+  transition:all .5s;position:relative;overflow:hidden;
+}
+#gonogo::before{content:'';position:absolute;inset:0;opacity:.03;background:repeating-linear-gradient(45deg,#fff,#fff 1px,transparent 1px,transparent 8px)}
+#gonogo.go{background:rgba(0,229,200,.06);border-color:rgba(0,229,200,.4)}
+#gonogo.nogo{background:rgba(255,59,59,.1);border-color:rgba(255,59,59,.5);box-shadow:0 0 30px rgba(255,59,59,.15)}
+#gng-lbl{font-family:'Orbitron',monospace;font-size:28px;font-weight:900;letter-spacing:.2em}
+#gonogo.go #gng-lbl{color:var(--teal);text-shadow:0 0 20px var(--teal)}
+#gonogo.nogo #gng-lbl{color:var(--red);text-shadow:0 0 20px var(--red);animation:dotBlink .7s infinite}
+#gng-sub{font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);margin-top:5px;letter-spacing:.07em}
+
+/* Detection score */
+.det-card{border:1px solid var(--border2);border-radius:6px;padding:10px 12px;background:rgba(10,20,40,.4)}
+.det-score-row{display:flex;align-items:baseline;gap:8px;margin-bottom:6px}
+.det-num{font-family:'Orbitron',monospace;font-size:28px;font-weight:700;color:var(--gold);text-shadow:0 0 15px var(--gold-glow);transition:color .3s}
+.det-info{font-family:'Share Tech Mono',monospace}
+.det-label{font-size:9px;color:var(--muted);letter-spacing:.08em}
+.det-thresh{font-size:9px;margin-top:2px;letter-spacing:.06em;transition:color .3s}
+.det-bar-bg{height:5px;background:rgba(30,60,100,.6);border-radius:3px;overflow:hidden}
+.det-bar{height:100%;border-radius:3px;transition:width .5s,background .4s}
+
+/* Sensor gauges */
+.sg-card{border:1px solid var(--border2);border-radius:6px;padding:9px 11px;background:rgba(8,16,32,.5);transition:border-color .3s}
+.sg-card.sg-warn{border-color:rgba(255,109,0,.5)}
+.sg-card.sg-bad{border-color:rgba(255,59,59,.5);box-shadow:0 0 10px rgba(255,59,59,.1)}
+.sg-top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:4px}
+.sg-name{font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:.06em}
+.sg-val{font-family:'Orbitron',monospace;font-size:15px;font-weight:700;transition:color .3s}
+.sg-unit{font-size:8px;color:var(--muted);margin-left:2px}
+.sg-bar-bg{height:3px;background:rgba(30,60,100,.6);border-radius:2px;margin-bottom:3px;overflow:hidden}
+.sg-bar{height:100%;border-radius:2px;transition:width .45s,background .35s}
+.sg-residual{font-family:'Share Tech Mono',monospace;font-size:8px;letter-spacing:.05em;color:var(--muted);transition:color .3s}
+.sg-ok{color:var(--teal)}.sg-warn-c{color:var(--orange)}.sg-bad-c{color:var(--red)}
+
+/* Energy field */
+.ef-wrap{border:1px solid var(--border2);border-radius:6px;padding:10px 11px;background:rgba(8,16,32,.5)}
+.ef-grid{display:grid;grid-template-columns:repeat(6,1fr);gap:3px;margin:6px 0 4px}
+.ef-cell{aspect-ratio:1;border-radius:2px;transition:background .5s,box-shadow .5s;cursor:default;position:relative}
+.ef-cell:hover .ef-tip{display:block}
+.ef-tip{display:none;position:absolute;bottom:110%;left:50%;transform:translateX(-50%);background:#0d1a2e;border:1px solid var(--border2);color:var(--text);font-family:'Share Tech Mono',monospace;font-size:8px;padding:3px 6px;border-radius:3px;white-space:nowrap;z-index:100;pointer-events:none}
+.ef-labels{display:grid;grid-template-columns:repeat(6,1fr);gap:3px}
+.ef-lbl{font-family:'Share Tech Mono',monospace;font-size:7px;color:var(--muted);text-align:center;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;letter-spacing:.04em}
+
+/* Action panel */
+.action-card{border:1px solid var(--border2);border-radius:6px;padding:10px 12px;background:rgba(8,16,32,.5);transition:border-color .3s}
+.action-card.act-bad{border-color:rgba(255,109,0,.4);background:rgba(255,109,0,.04)}
+.ac-title{font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--muted);letter-spacing:.1em;margin-bottom:5px}
+.ac-text{font-size:11px;line-height:1.55;transition:color .3s}
+
+/* ── HUD OVERLAYS ── */
+.hud{position:fixed;pointer-events:none;z-index:10;font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:.06em;line-height:1.7}
+#hud-tl{top:70px;left:250px}
+#hud-tr{top:70px;right:270px;text-align:right}
+#hud-bl{bottom:14px;left:250px}
+#hud-br{bottom:14px;right:270px;text-align:right}
+.hud-hi{color:var(--teal)}
+.hud-warn{color:var(--red)}
+.hud-gold{color:var(--gold)}
+
+/* ── LEAK ALERT OVERLAY ── */
+#leak-alert{
+  position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+  z-index:30;display:none;pointer-events:none;
+  background:rgba(4,8,16,.9);border:1px solid rgba(255,59,59,.7);border-radius:10px;
+  padding:20px 32px;text-align:center;backdrop-filter:blur(10px);
+  animation:alertPulse 1.2s ease-in-out infinite;
+}
+@keyframes alertPulse{0%,100%{box-shadow:0 0 0 0 transparent}50%{box-shadow:0 0 40px 8px rgba(255,59,59,.25)}}
+.al-title{font-family:'Orbitron',monospace;font-size:22px;font-weight:900;color:var(--red);letter-spacing:.15em;text-shadow:0 0 20px var(--red)}
+.al-zone{font-family:'Share Tech Mono',monospace;font-size:11px;color:var(--orange);margin-top:6px;letter-spacing:.07em}
+.al-conf{font-family:'Share Tech Mono',monospace;font-size:10px;color:var(--muted);margin-top:3px}
+
+/* ── FLOW PATH CANVAS ── */
+#flow-canvas{position:fixed;inset:0;z-index:3;pointer-events:none}
+
+/* ── BOOT SEQUENCE ── */
+#boot{position:fixed;inset:0;z-index:100;background:var(--ink);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;transition:opacity 1s}
+#boot.done{opacity:0;pointer-events:none}
+.boot-logo{font-family:'Orbitron',monospace;font-size:32px;font-weight:900;color:var(--gold);letter-spacing:.2em;text-shadow:0 0 30px var(--gold-glow)}
+.boot-sub{font-family:'Share Tech Mono',monospace;font-size:12px;color:var(--teal);letter-spacing:.12em;margin-top:-8px}
+.boot-bar-bg{width:280px;height:3px;background:rgba(30,60,100,.6);border-radius:2px;overflow:hidden}
+.boot-bar{height:100%;background:linear-gradient(90deg,var(--teal),var(--blue));border-radius:2px;width:0%;transition:width .05s}
+.boot-msg{font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--muted);letter-spacing:.1em;min-height:14px}
+
+/* ── TOOLTIP CURSOR ── */
+#cursor-tooltip{position:fixed;z-index:50;pointer-events:none;background:var(--glass);border:1px solid var(--border2);border-radius:4px;padding:4px 10px;font-family:'Share Tech Mono',monospace;font-size:9px;color:var(--text);letter-spacing:.05em;display:none;backdrop-filter:blur(10px);transform:translate(14px,-50%)}
+</style>
+</head>
+<body>
+
+<!-- Boot sequence -->
+<div id="boot">
+  <div class="boot-logo">LEAKSENSE TWIN</div>
+  <div class="boot-sub">CAT® C18 ACERT DIGITAL TWIN v3.0</div>
+  <div class="boot-bar-bg"><div class="boot-bar" id="bbar"></div></div>
+  <div class="boot-msg" id="bmsg">Initializing physics engine...</div>
+</div>
+
+<!-- Scanline + Vignette -->
+<div id="scanline"></div>
+<div id="vignette"></div>
+<div id="cursor-tooltip"></div>
+
+<!-- 3D Canvas -->
+<canvas id="cvs"></canvas>
+
+<!-- Flow path overlay canvas -->
+<canvas id="flow-canvas"></canvas>
+
+<!-- ═══ TOP BAR ═══════════════════════════════════════════════ -->
+<div id="topbar">
+  <div class="tb-logo">
+    <span class="tb-cat">CAT</span>
+    <div>
+      <div class="tb-name">LEAKSENSE TWIN</div>
+      <div class="tb-model">C18 ACERT DITA · 597kW · 18.1L INLINE-6</div>
+    </div>
+  </div>
+  <div class="tb-sep"></div>
+  <div id="main-status" class="status-badge sb-healthy">
+    <span class="sb-dot"></span>
+    <span id="status-txt">ENGINE HEALTHY</span>
+  </div>
+  <div class="tb-sep"></div>
+  <div class="tb-metrics">
+    <div class="tb-metric"><div class="tbm-val" id="hv-rpm">1800</div><div class="tbm-lbl">RPM</div></div>
+    <div class="tb-metric"><div class="tbm-val" id="hv-maf">842</div><div class="tbm-lbl">MAF KG/H</div></div>
+    <div class="tb-metric"><div class="tbm-val" id="hv-boost">218</div><div class="tbm-lbl">BOOST kPa</div></div>
+    <div class="tb-metric"><div class="tbm-val" id="hv-exh">512</div><div class="tbm-lbl">EXH °C</div></div>
+    <div class="tb-metric"><div class="tbm-val" id="hv-conf" style="color:var(--muted)">—</div><div class="tbm-lbl">LEAK CONF %</div></div>
+    <div class="tb-metric"><div class="tbm-val" id="hv-time">00:00</div><div class="tbm-lbl">T+ SESSION</div></div>
+  </div>
+</div>
+
+<!-- ═══ LEFT PANEL ═══════════════════════════════════════════ -->
+<div id="lpanel">
+  <div class="lp-sec-title">Engine Zones</div>
+
+  <div class="zone-card zc1" id="zcard1" onclick="focusZone(1)">
+    <div class="zn-name">ZONE 1 — INTAKE</div>
+    <div class="zn-desc">Airflow meter → Compressor inlet</div>
+    <div class="zn-status zs-ok" id="zstat1">■ NOMINAL</div>
+  </div>
+  <div class="zone-card zc2" id="zcard2" onclick="focusZone(2)">
+    <div class="zn-name">ZONE 2 — CHARGE AIR</div>
+    <div class="zn-desc">Compressor → CAC/Intercooler → Manifold</div>
+    <div class="zn-status zs-ok" id="zstat2">■ NOMINAL</div>
+  </div>
+  <div class="zone-card zc3" id="zcard3" onclick="focusZone(3)">
+    <div class="zn-name">ZONE 3 — EXHAUST</div>
+    <div class="zn-desc">Manifold → Turbo → DOC → DPF → SCR</div>
+    <div class="zn-status zs-ok" id="zstat3">■ NOMINAL</div>
+  </div>
+
+  <div class="lp-sec-title">Simulate Leak</div>
+  <div class="leak-grid">
+    <button class="lk-btn" id="lb-A" onclick="simLeak('A')">ZONE A<span class="lk-sub">Airflow meter</span></button>
+    <button class="lk-btn" id="lb-B" onclick="simLeak('B')">ZONE B<span class="lk-sub">Pre-CAC boost</span></button>
+    <button class="lk-btn" id="lb-C" onclick="simLeak('C')">ZONE C<span class="lk-sub">Post-CAC</span></button>
+    <button class="lk-btn" id="lb-D" onclick="simLeak('D')">ZONE D<span class="lk-sub">Exh manifold</span></button>
+    <button class="lk-btn" id="lb-E" onclick="simLeak('E')">ZONE E<span class="lk-sub">DPF/SCR</span></button>
+    <button class="lk-btn" id="lb-F" onclick="simLeak('F')">FUEL<span class="lk-sub">Rail leak 🔥</span></button>
+  </div>
+
+  <div class="lp-sec-title">Severity</div>
+  <div class="ctrl-row">
+    <span class="ctrl-lbl">SEVERITY</span>
+    <input type="range" min="1" max="3" value="2" class="ctrl-slider" id="sev-sl" oninput="onSev(this.value)">
+    <span class="ctrl-val" id="sev-v">MED</span>
+  </div>
+
+  <div class="lp-sec-title">Engine Control</div>
+  <div class="ctrl-row">
+    <span class="ctrl-lbl">RPM</span>
+    <input type="range" min="1100" max="2100" value="1800" step="100" class="ctrl-slider" id="rpm-sl" oninput="onRPM(this.value)">
+    <span class="ctrl-val" id="rpm-v" style="min-width:44px">1800</span>
+  </div>
+  <div class="ctrl-row">
+    <span class="ctrl-lbl">LOAD %</span>
+    <input type="range" min="20" max="100" value="75" step="5" class="ctrl-slider" id="load-sl" oninput="onLoad(this.value)">
+    <span class="ctrl-val" id="load-v">75%</span>
+  </div>
+
+  <div class="lp-sec-title">Camera</div>
+  <div class="cam-grid">
+    <button class="cam-btn" onclick="setCam('iso')" id="cbtn-iso">ISO</button>
+    <button class="cam-btn" onclick="setCam('front')" id="cbtn-front">FRONT</button>
+    <button class="cam-btn" onclick="setCam('side')" id="cbtn-side">SIDE</button>
+    <button class="cam-btn" onclick="setCam('top')" id="cbtn-top">TOP</button>
+    <button class="cam-btn" onclick="setCam('rear')" id="cbtn-rear">REAR</button>
+    <button class="cam-btn" onclick="toggleExplode()" id="cbtn-exp">XPLODE</button>
+  </div>
+  <div class="ctrl-row" style="margin-top:2px">
+    <span class="ctrl-lbl">ZOOM</span>
+    <input type="range" min="6" max="28" value="15" class="ctrl-slider" id="zoom-sl" oninput="onZoom(this.value)">
+  </div>
+
+  <div class="lp-sec-title">Visibility</div>
+  <div class="ctrl-row">
+    <span class="ctrl-lbl">OPACITY</span>
+    <input type="range" min="20" max="100" value="100" class="ctrl-slider" id="opac-sl" oninput="onOpacity(this.value)">
+    <span class="ctrl-val" id="opac-v">100%</span>
+  </div>
+
+  <button class="clear-btn" onclick="clearLeak()">✕ CLEAR SIMULATION</button>
+</div>
+
+<!-- ═══ RIGHT PANEL ═══════════════════════════════════════════ -->
+<div id="rpanel">
+  <div id="gonogo" class="go">
+    <div id="gng-lbl">GO</div>
+    <div id="gng-sub">All zones within tolerance</div>
+  </div>
+
+  <div class="lp-sec-title">Energy Field Deviation</div>
+  <div class="det-card">
+    <div class="det-score-row">
+      <div class="det-num" id="det-num">0.14</div>
+      <div class="det-info">
+        <div class="det-label">FROBENIUS NORM SCORE</div>
+        <div class="det-thresh" id="det-thresh" style="color:var(--teal)">BELOW THRESHOLD (2.50)</div>
+      </div>
+    </div>
+    <div class="det-bar-bg"><div class="det-bar" id="det-bar" style="width:5.6%;background:var(--teal)"></div></div>
+  </div>
+
+  <div class="lp-sec-title">Live Sensor Feed</div>
+  <div id="sensors-wrap"></div>
+
+  <div class="lp-sec-title">Energy Field 6×6</div>
+  <div class="ef-wrap">
+    <div style="font-family:'Share Tech Mono',monospace;font-size:8px;color:var(--muted);margin-bottom:4px;letter-spacing:.07em">CORRELATION DEVIATION MATRIX</div>
+    <div class="ef-grid" id="ef-grid"></div>
+    <div class="ef-labels" id="ef-labels"></div>
+  </div>
+
+  <div class="lp-sec-title">Recommended Action</div>
+  <div class="action-card" id="action-card">
+    <div class="ac-title">// SYSTEM RECOMMENDATION</div>
+    <div class="ac-text" id="action-txt" style="color:var(--teal)">Engine operating within nominal parameters. All twin residuals within ±2% tolerance.</div>
+  </div>
+</div>
+
+<!-- ═══ HUD ═══════════════════════════════════════════════════ -->
+<div class="hud" id="hud-tl">
+  <div>CAT® C18 ACERT <span class="hud-gold">DITA</span></div>
+  <div>18.1L · IN-6 · 597kW @ 2100RPM</div>
+  <div>TWIN TORQUE: <span class="hud-gold">3655 Nm</span> @ 1400RPM</div>
+  <div style="margin-top:4px">SESSION: <span class="hud-hi" id="hud-time">00:00</span></div>
+</div>
+<div class="hud" id="hud-tr">
+  <div>DRAG ← → TO ROTATE</div>
+  <div>SCROLL TO ZOOM</div>
+  <div>CLICK PART TO INSPECT</div>
+  <div style="margin-top:4px">TWIN MODEL: <span class="hud-hi">ACTIVE</span></div>
+</div>
+<div class="hud" id="hud-bl">
+  <div>PHYSICS ENGINE: <span class="hud-hi">ONLINE</span></div>
+  <div>STEADY-STATE: <span class="hud-hi" id="hud-ss">LOCKED</span></div>
+  <div>INFERENCE: <span class="hud-hi">&lt;25ms</span></div>
+</div>
+<div class="hud" id="hud-br" style="text-align:right">
+  <div>ENERGY FIELD DEV</div>
+  <div class="hud-hi" id="hud-ef">0.14</div>
+  <div style="margin-top:4px">COSINE SIM: <span class="hud-hi" id="hud-cos">0.997</span></div>
+</div>
+
+<!-- Leak alert -->
+<div id="leak-alert">
+  <div class="al-title">⚠ LEAK DETECTED</div>
+  <div class="al-zone" id="al-zone">Zone B — Pre-CAC Boost Pipe</div>
+  <div class="al-conf" id="al-conf">Confidence: 91% · Severity: Medium · Flow Loss: 8%</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ═══════════════════════════════════════════════════════
+// BOOT SEQUENCE
+// ═══════════════════════════════════════════════════════
+const bootMsgs=['Initializing physics engine...','Loading Cat C18 ACERT model...','Calibrating digital twin zones...','Connecting ECU telemetry feed...','Energy field baseline computed...','Twin model validation: PASS','System ready.'];
+let bootI=0,bootPct=0;
+const bbar=document.getElementById('bbar'),bmsg=document.getElementById('bmsg');
+const bootInt=setInterval(()=>{
+  bootPct+=15;bbar.style.width=Math.min(100,bootPct)+'%';
+  bmsg.textContent=bootMsgs[Math.min(bootI++,bootMsgs.length-1)];
+  if(bootPct>=100){clearInterval(bootInt);setTimeout(()=>document.getElementById('boot').classList.add('done'),400)}
+},220);
+
+// ═══════════════════════════════════════════════════════
+// THREE.JS SCENE
+// ═══════════════════════════════════════════════════════
+const canvas=document.getElementById('cvs');
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:true,logarithmicDepthBuffer:true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
+renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=1.4;
+renderer.outputEncoding=THREE.sRGBEncoding;
+
+const scene=new THREE.Scene();
+scene.fog=new THREE.FogExp2(0x010408,0.045);
+
+const camera=new THREE.PerspectiveCamera(42,1,0.05,200);
+camera.position.set(10,6,14);camera.lookAt(0,0.5,0);
+
+function resize(){
+  const W=window.innerWidth,H=window.innerHeight;
+  renderer.setSize(W,H,false);camera.aspect=W/H;camera.updateProjectionMatrix();
+}
+resize();window.addEventListener('resize',resize);
+
+// ── LIGHTS ──────────────────────────────────────────────
+// Key light — warm directional
+const keyLight=new THREE.DirectionalLight(0xfff8e8,2.2);
+keyLight.position.set(10,15,8);keyLight.castShadow=true;
+keyLight.shadow.mapSize.set(4096,4096);keyLight.shadow.camera.near=0.5;keyLight.shadow.camera.far=60;
+keyLight.shadow.camera.left=-12;keyLight.shadow.camera.right=12;
+keyLight.shadow.camera.top=12;keyLight.shadow.camera.bottom=-12;
+keyLight.shadow.bias=-0.002;scene.add(keyLight);
+
+// Fill light — cool blue
+const fillLight=new THREE.PointLight(0x4488ff,1.0,40);fillLight.position.set(-8,4,6);scene.add(fillLight);
+// Rim light — orange
+const rimLight=new THREE.PointLight(0xff6600,1.4,25);rimLight.position.set(6,3,-8);scene.add(rimLight);
+// Under light — subtle
+const underLight=new THREE.PointLight(0x112244,0.8,20);underLight.position.set(0,-4,0);scene.add(underLight);
+// Ambient
+const ambient=new THREE.HemisphereLight(0x1a2a4a,0x050a0f,0.4);scene.add(ambient);
+// Gold accent
+const goldAccent=new THREE.PointLight(0xF5C518,0,12);goldAccent.position.set(0,5,2);scene.add(goldAccent);
+
+// ── ENVIRONMENT CUBE (fake IBL) ──────────────────────────
+const pmremGenerator=new THREE.PMREMGenerator(renderer);
+pmremGenerator.compileEquirectangularShader();
+
+// ── MATERIALS ───────────────────────────────────────────
+function mat(color,roughness,metalness,opts={}){
+  return new THREE.MeshStandardMaterial({color,roughness,metalness,envMapIntensity:0.8,...opts});
+}
+function matE(color,roughness,metalness,emissive,emissiveIntensity){
+  return new THREE.MeshStandardMaterial({color,roughness,metalness,emissive,emissiveIntensity,envMapIntensity:0.6});
+}
+
+const M={
+  block:    mat(0x3d3a30,0.75,0.65),
+  head:     mat(0x7a7868,0.55,0.72),
+  valveCov: mat(0x8a8878,0.45,0.75),
+  piston:   mat(0xb0aa98,0.35,0.80),
+  crank:    mat(0x5a5850,0.25,0.88),
+  oilPan:   mat(0x1e1c18,0.90,0.30),
+  intake:   matE(0x1a5c3c,0.40,0.55,0x0a3020,0.15),
+  boost:    matE(0x1a3d6e,0.30,0.72,0x0a1a40,0.20),
+  exhaust:  matE(0x6a2815,0.50,0.60,0x3a0f05,0.35),
+  turbo:    mat(0x7a7060,0.28,0.88),
+  turboBlade:mat(0xc8c0a8,0.18,0.95),
+  dpf:      mat(0x2e2820,0.85,0.35),
+  fuelRail: matE(0xc08028,0.28,0.92,0x804000,0.10),
+  bolt:     mat(0x888070,0.28,0.92),
+  ecu:      mat(0x181820,0.72,0.45),
+  airBox:   mat(0x252c22,0.80,0.30),
+  sensor:   mat(0xc04020,0.35,0.75),
+};
+
+// Zone highlight materials (cloned, we set emissiveIntensity dynamically)
+const MZ={
+  1: matE(0x00E5C8,0.35,0.55,0x00E5C8,0),
+  2: matE(0x2196F3,0.30,0.60,0x2196F3,0),
+  3: matE(0xFF6D00,0.35,0.55,0xFF6D00,0),
+};
+const M_LEAK=matE(0xFF3B3B,0.40,0.45,0xFF1500,0.6);
+const M_FUEL=matE(0xFF8800,0.35,0.40,0xFF5500,0.7);
+
+// ── MESH HELPERS ────────────────────────────────────────
+const EG=new THREE.Group();scene.add(EG);
+const ZPARTS={1:[],2:[],3:[]};
+const ORIG=new Map(); // original positions for explode
+const ALL_MESHES=[];
+
+function add(geo,mat,x,y,z,rx=0,ry=0,rz=0,zone=0,cast=true){
+  const m=new THREE.Mesh(geo,mat instanceof THREE.Material?mat.clone():mat);
+  m.position.set(x,y,z);m.rotation.set(rx,ry,rz);
+  if(cast){m.castShadow=true;m.receiveShadow=true;}
+  EG.add(m);ORIG.set(m,m.position.clone());
+  if(zone>0)ZPARTS[zone].push(m);
+  ALL_MESHES.push(m);
+  return m;
+}
+
+const BX=(w,h,d)=>new THREE.BoxGeometry(w,h,d,1,1,1);
+const CY=(rt,rb,h,s=16)=>new THREE.CylinderGeometry(rt,rb,h,s);
+const SP=(r,sw=16,sh=12)=>new THREE.SphereGeometry(r,sw,sh);
+const TO=(R,r,ts=8,rs=32)=>new THREE.TorusGeometry(R,r,ts,rs);
+
+// ════════════════════════════════════════════════════════
+// ENGINE BLOCK  (detailed inline-6 C18)
+// ════════════════════════════════════════════════════════
+// Main block
+const block=add(BX(6.6,3.8,3.0),M.block, 0,0,0);
+// Block side ribbing
+for(let i=0;i<5;i++){add(BX(0.08,3.6,3.0),mat(0x2e2c24,0.85,0.5), -2.4+i*1.2,-0.1,0);}
+// Cylinder bores (6 — visible from top)
+for(let i=0;i<6;i++){
+  const bore=new THREE.Mesh(CY(0.32,0.32,3.2,18),new THREE.MeshStandardMaterial({color:0x181614,roughness:0.95,metalness:0.2,side:THREE.BackSide}));
+  bore.position.set(-3+i*1.18,0.2,0);EG.add(bore);
+}
+// Cylinder liners
+for(let i=0;i<6;i++) add(CY(0.33,0.33,3.0,18),mat(0x4a4840,0.45,0.75),-3+i*1.18,0.2,0);
+
+// ── CYLINDER HEAD ────────────────────────────────────────
+const head=add(BX(6.6,0.85,3.0),M.head, 0,2.32,0);
+// Head fins
+for(let i=0;i<9;i++) add(BX(6.4,0.05,2.9),mat(0x686858,0.55,0.65), 0,1.98+i*0.06,0);
+// Head bolts (14)
+const boltPos=[[-3,2.8,1.2],[-1.5,2.8,1.2],[0,2.8,1.2],[1.5,2.8,1.2],[3,2.8,1.2],
+               [-3,2.8,-1.2],[-1.5,2.8,-1.2],[0,2.8,-1.2],[1.5,2.8,-1.2],[3,2.8,-1.2],
+               [-3,2.8,0],[3,2.8,0]];
+boltPos.forEach(([x,y,z])=>{
+  add(CY(0.09,0.09,1.1,8),M.bolt,x,y,z);
+  add(CY(0.14,0.14,0.08,6),M.bolt,x,y+0.55,z);
+});
+
+// ── VALVE COVER ──────────────────────────────────────────
+const valveCov=add(BX(6.4,0.55,2.8),M.valveCov, 0,2.85,0);
+// Oil fill cap
+add(CY(0.2,0.2,0.18,10),mat(0x303028,0.6,0.5),-2.5,3.14,0.5);
+// Valve cover raised ridges
+for(let i=0;i<6;i++) add(BX(0.7,0.12,2.6),mat(0x9a9888,0.4,0.72),-3+i*1.18,3.07,0);
+
+// ── PISTONS (animated) ───────────────────────────────────
+const pistons=[];
+for(let i=0;i<6;i++){
+  const pg=new THREE.Group();
+  // Piston crown
+  const crown=new THREE.Mesh(CY(0.28,0.28,0.22,18),M.piston.clone());
+  crown.position.y=0;pg.add(crown);
+  // Piston skirt
+  const skirt=new THREE.Mesh(CY(0.26,0.26,0.3,18),M.piston.clone());
+  skirt.position.y=-0.26;pg.add(skirt);
+  // Rings (3)
+  for(let r=0;r<3;r++){
+    const ring=new THREE.Mesh(TO(0.27,0.02,5,12),mat(0xb8b0a0,0.2,0.95));
+    ring.position.y=0.04-r*0.07;ring.rotation.x=Math.PI/2;pg.add(ring);
+  }
+  // Con rod
+  const rod=new THREE.Mesh(CY(0.06,0.05,1.35,8),M.crank.clone());
+  rod.position.y=-0.78;pg.add(rod);
+  pg.position.set(-3+i*1.18,0.2,0);
+  EG.add(pg);ORIG.set(pg,pg.position.clone());
+  pistons.push({g:pg,offset:(i*Math.PI*2)/6});
+}
+
+// ── CRANKSHAFT ───────────────────────────────────────────
+add(CY(0.22,0.22,7.2,14),M.crank,0,-1.5,0,0,0,Math.PI/2);
+for(let i=0;i<6;i++){
+  add(BX(0.18,0.7,0.18),M.crank,-3+i*1.18,-1.1,0);
+  add(CY(0.2,0.2,0.22,10),M.crank,-3+i*1.18,-1.5,0,0,0,Math.PI/2);
+}
+
+// ── OIL PAN ──────────────────────────────────────────────
+const oilPan=add(BX(6.4,1.0,2.8),M.oilPan,0,-2.4,0);
+// Oil drain bolt
+add(CY(0.12,0.12,0.18,8),M.bolt,1.5,-2.92,0,Math.PI/2);
+
+// ── FLYWHEEL ─────────────────────────────────────────────
+add(CY(0.8,0.8,0.28,24),mat(0x4a4438,0.55,0.80),3.65,-0.3,0,0,0,Math.PI/2);
+add(CY(0.3,0.3,0.35,16),M.crank,3.65,-0.3,0,0,0,Math.PI/2);
+
+// ════════════════════════════════════════════════════════
+// INTAKE SYSTEM  — Zone 1 + Zone 2
+// ════════════════════════════════════════════════════════
+// Air filter box
+const airBox=add(BX(1.2,1.0,1.0),M.airBox,-5.0,3.2,0,0,0,0,1);
+add(CY(0.08,0.08,1.2,8),mat(0x303028,0.6,0.5),-4.7,3.5,0,0,0,Math.PI/2);
+// Air box outlet (to MAF)
+add(CY(0.22,0.22,0.6,12),M.intake.clone(),-4.3,3.2,0,0,0,Math.PI/2,1);
+// MAF sensor pipe
+const mafPipe=add(CY(0.23,0.23,1.4,12),M.intake.clone(),-3.4,3.1,0,0,0,Math.PI/2,1);
+// MAF sensor body
+add(SP(0.18,12,8),M.sensor,-3.4,3.4,0,0,0,0,1);
+// Intake pipe: MAF → compressor
+const intakePipe1=add(CY(0.21,0.21,1.2,12),M.intake.clone(),-2.0,3.4,0.2,0.3,0.3,0,1);
+const intakePipe2=add(CY(0.21,0.21,0.9,12),M.intake.clone(),-1.2,3.9,0.1,-0.4,0,0.2,1);
+
+// ── INTAKE MANIFOLD ──────────────────────────────────────
+const intakeMan=add(BX(6.0,0.65,1.2),M.intake.clone(),0,3.3,-1.15,0,0,0,2);
+// Intake runners (6)
+for(let i=0;i<6;i++){
+  const runner=add(CY(0.16,0.15,0.7,10),M.intake.clone(),-3+i*1.18,2.95,-0.8,Math.PI/2.2,0,0,2);
+}
+// Throttle body
+add(CY(0.32,0.32,0.28,12),M.intake.clone(),-2.8,3.32,-1.5,Math.PI/2,0,0,2);
+
+// ════════════════════════════════════════════════════════
+// TURBOCHARGERS (Twin — DITA)  — Zone 2 + 3
+// ════════════════════════════════════════════════════════
+// Turbo 1 — primary (high pressure)
+const turbo1=new THREE.Group();
+// Compressor housing (scroll shape approximation)
+const t1cHousing=new THREE.Mesh(CY(0.72,0.6,0.6,20),M.turbo.clone());
+t1cHousing.rotation.x=Math.PI/2;turbo1.add(t1cHousing);
+// Turbine housing
+const t1tHousing=new THREE.Mesh(CY(0.68,0.55,0.52,20),mat(0x6a5840,0.35,0.80));
+t1tHousing.position.y=0.58;t1tHousing.rotation.x=Math.PI/2;turbo1.add(t1tHousing);
+// Compressor blades
+for(let b=0;b<11;b++){
+  const blade=new THREE.Mesh(BX(0.05,0.42,0.08),M.turboBlade.clone());
+  blade.position.set(Math.sin(b/11*Math.PI*2)*0.35,0,Math.cos(b/11*Math.PI*2)*0.35);
+  blade.rotation.y=-b/11*Math.PI*2;blade.rotation.z=0.3;turbo1.add(blade);
+}
+// Turbine blades
+for(let b=0;b<13;b++){
+  const blade=new THREE.Mesh(BX(0.05,0.38,0.07),mat(0xb88060,0.25,0.85));
+  blade.position.set(Math.sin(b/13*Math.PI*2)*0.32,0.58,Math.cos(b/13*Math.PI*2)*0.32);
+  blade.rotation.y=-b/13*Math.PI*2;blade.rotation.z=0.25;turbo1.add(blade);
+}
+// Shaft
+const shaft1=new THREE.Mesh(CY(0.06,0.06,1.2,8),M.crank.clone());shaft1.rotation.x=Math.PI/2;turbo1.add(shaft1);
+turbo1.position.set(3.2,3.4,0.2);
+EG.add(turbo1);ORIG.set(turbo1,turbo1.position.clone());
+ZPARTS[2].push(turbo1);ZPARTS[3].push(turbo1);
+
+// Turbo 2 — secondary (low pressure)
+const turbo2=new THREE.Group();
+const t2cHousing=new THREE.Mesh(CY(0.60,0.50,0.52,20),M.turbo.clone());
+t2cHousing.rotation.x=Math.PI/2;turbo2.add(t2cHousing);
+const t2tHousing=new THREE.Mesh(CY(0.58,0.48,0.46,20),mat(0x6a5840,0.35,0.80));
+t2tHousing.position.y=0.52;t2tHousing.rotation.x=Math.PI/2;turbo2.add(t2tHousing);
+for(let b=0;b<10;b++){
+  const blade=new THREE.Mesh(BX(0.045,0.36,0.07),M.turboBlade.clone());
+  blade.position.set(Math.sin(b/10*Math.PI*2)*0.28,0,Math.cos(b/10*Math.PI*2)*0.28);
+  blade.rotation.y=-b/10*Math.PI*2;blade.rotation.z=0.28;turbo2.add(blade);
+}
+turbo2.position.set(3.2,1.6,-0.2);
+EG.add(turbo2);ORIG.set(turbo2,turbo2.position.clone());
+ZPARTS[2].push(turbo2);
+
+// ── CHARGE AIR PIPES ─────────────────────────────────────
+const boostPipe=add(CY(0.20,0.20,2.8,12),M.boost.clone(),2.0,4.2,-0.3,0,0,Math.PI/5,2);
+const boostElbow=add(SP(0.24,10,8),M.boost.clone(),1.0,4.6,-0.3,0,0,0,2);
+const boostPipe2=add(CY(0.20,0.20,2.0,12),M.boost.clone(),-0.5,4.8,-0.3,0,0,0,2);
+
+// ── CAC / INTERCOOLER ─────────────────────────────────────
+const cac=add(BX(3.2,1.4,0.58),M.boost.clone(),-2.0,5.1,-0.3,0,0,0,2);
+// CAC core fins
+for(let f=0;f<10;f++) add(BX(3.0,0.06,0.52),mat(0x1a3a5e,0.55,0.60),-2.0,4.5+f*0.14,-0.3,0,0,0,2);
+// CAC tanks (end caps)
+add(CY(0.55,0.55,0.22,12),M.boost.clone(),-3.6,5.1,-0.3,0,0,Math.PI/2,2);
+add(CY(0.55,0.55,0.22,12),M.boost.clone(),-0.4,5.1,-0.3,0,0,Math.PI/2,2);
+// CAC outlet pipe
+const cacOut=add(CY(0.19,0.19,1.6,12),M.boost.clone(),-3.4,4.3,-0.8,0.4,0,0.3,2);
+const cacOut2=add(CY(0.19,0.19,1.2,12),M.boost.clone(),-3.2,3.6,-1.0,Math.PI/2.5,0,-0.2,2);
+
+// ════════════════════════════════════════════════════════
+// EXHAUST SYSTEM  — Zone 3
+// ════════════════════════════════════════════════════════
+// Exhaust manifold
+const exhMan=add(BX(6.0,0.55,0.8),M.exhaust.clone(),0,2.9,1.4,0,0,0,3);
+// Exhaust runners (6 — individual primaries)
+for(let i=0;i<6;i++){
+  add(CY(0.14,0.13,0.65,8),M.exhaust.clone(),-3+i*1.18,2.55,1.15,Math.PI/2.5,0,0,3);
+}
+// Exhaust collector → turbo 1
+add(CY(0.22,0.22,2.0,10),M.exhaust.clone(),2.2,3.0,1.2,0,0,-Math.PI/7,3);
+// Exhaust collector → turbo 2
+add(CY(0.18,0.18,1.6,10),M.exhaust.clone(),2.4,1.8,1.0,-0.2,0,-Math.PI/8,3);
+// Post-turbo downpipe
+add(CY(0.21,0.21,1.8,10),M.exhaust.clone(),4.0,2.0,0.6,0,0,-Math.PI/2.4,3);
+// DOC (diesel oxidation catalyst)
+const doc=add(CY(0.50,0.50,1.2,14),M.dpf.clone(),4.8,1.5,0.5,0,0,Math.PI/2,3);
+add(CY(0.52,0.52,0.12,14),mat(0x3e3228,0.8,0.40),4.22,1.5,0.5,0,0,Math.PI/2,3);
+add(CY(0.52,0.52,0.12,14),mat(0x3e3228,0.8,0.40),5.38,1.5,0.5,0,0,Math.PI/2,3);
+// DOC → DPF pipe
+add(CY(0.19,0.19,0.45,10),M.exhaust.clone(),4.8,0.88,0.5,Math.PI/2,0,0,3);
+// DPF (diesel particulate filter)
+const dpf=add(CY(0.56,0.56,1.5,14),M.dpf.clone(),4.8,0.1,0.5,0,0,Math.PI/2,3);
+add(CY(0.58,0.58,0.14,14),mat(0x2e2418,0.85,0.35),4.05,0.1,0.5,0,0,Math.PI/2,3);
+add(CY(0.58,0.58,0.14,14),mat(0x2e2418,0.85,0.35),5.55,0.1,0.5,0,0,Math.PI/2,3);
+// DPF → SCR
+add(CY(0.17,0.17,0.5,10),M.exhaust.clone(),4.8,-0.7,0.5,Math.PI/2,0,0,3);
+// SCR
+add(CY(0.48,0.48,1.3,12),M.dpf.clone(),4.8,-1.4,0.5,0,0,Math.PI/2,3);
+// Tailpipe
+const tailPipe=add(CY(0.16,0.18,1.2,10),M.exhaust.clone(),4.8,-2.5,0.5,Math.PI/2,0,0.08,3);
+
+// ── FUEL SYSTEM ──────────────────────────────────────────
+// Fuel rail (high-pressure common rail)
+const fuelRail=add(BX(6.2,0.18,0.18),M.fuelRail.clone(),0,2.45,-0.8);
+// Injectors (6)
+for(let i=0;i<6;i++){
+  add(CY(0.055,0.04,0.42,8),M.fuelRail.clone(),-3+i*1.18,2.18,-0.8);
+  add(CY(0.09,0.09,0.08,6),mat(0xa06020,0.3,0.9),-3+i*1.18,2.46,-0.8);
+}
+// HP fuel pump
+add(CY(0.25,0.22,0.55,10),mat(0x5a5848,0.4,0.75),-4.0,2.5,1.0);
+// Fuel supply line
+add(CY(0.06,0.06,4.5,6),mat(0x222840,0.5,0.4),-2.0,2.5,-1.2,0,0,Math.PI/2);
+
+// ── ECU ──────────────────────────────────────────────────
+add(BX(0.8,0.5,0.6),M.ecu,-4.2,1.8,1.1);
+add(BX(0.75,0.08,0.55),mat(0x242430,0.5,0.6),-4.2,2.06,1.1);
+// ECU connector
+add(BX(0.35,0.25,0.12),mat(0x1a1a28,0.7,0.4),-4.2,1.86,1.44);
+
+// ── COOLANT LINES ─────────────────────────────────────────
+add(CY(0.1,0.1,2.5,6),mat(0x1a3a5a,0.5,0.3),-3.5,3.5,0.8,0,0,Math.PI/6);
+add(CY(0.1,0.1,2.0,6),mat(0x1a3a5a,0.5,0.3),3.0,3.5,-0.8,0,0,-Math.PI/5);
+
+// ── THERMOSTAT HOUSING ────────────────────────────────────
+add(CY(0.28,0.28,0.4,10),mat(0x5a5848,0.4,0.72),-3.5,3.2,1.0,Math.PI/2);
+
+// ── DIPSTICK TUBE ─────────────────────────────────────────
+add(CY(0.05,0.05,1.8,6),mat(0x7a7060,0.4,0.7),2.0,-1.0,1.3,0.3,0,0.1);
+
+// ── WIRING HARNESS ────────────────────────────────────────
+for(let i=0;i<6;i++){
+  add(CY(0.028,0.028,1.1,5),mat(0x181818,0.9,0.1),-3+i*1.18,2.96,1.1,Math.PI/2.5,Math.random()*0.3,Math.random()*0.2);
+}
+
+// ── GROUND + SHADOW PLANE ─────────────────────────────────
+const shadowPlane=new THREE.Mesh(
+  new THREE.PlaneGeometry(25,25),
+  new THREE.ShadowMaterial({opacity:0.5})
+);
+shadowPlane.rotation.x=-Math.PI/2;shadowPlane.position.y=-3.1;shadowPlane.receiveShadow=true;scene.add(shadowPlane);
+
+// Grid
+const grid=new THREE.GridHelper(24,48,0x0d1a2e,0x0d1a2e);
+grid.position.y=-3.1;scene.add(grid);
+
+// Reflective ground
+const groundMesh=new THREE.Mesh(
+  new THREE.PlaneGeometry(24,24),
+  new THREE.MeshStandardMaterial({color:0x020508,roughness:0.95,metalness:0.05})
+);
+groundMesh.rotation.x=-Math.PI/2;groundMesh.position.y=-3.12;groundMesh.receiveShadow=true;scene.add(groundMesh);
+
+// ════════════════════════════════════════════════════════
+// PARTICLE SYSTEM — Leak visualization
+// ════════════════════════════════════════════════════════
+const MAX_PARTICLES=200;
+let leakParticles=null;
+
+const LEAK_POS={
+  A:{x:-3.4,y:3.2,z:0.2},
+  B:{x:2.0,y:4.2,z:-0.3},
+  C:{x:-3.2,y:3.6,z:-1.0},
+  D:{x:0,y:2.9,z:1.5},
+  E:{x:4.8,y:-0.5,z:0.5},
+  F:{x:0,y:2.45,z:-0.8},
+};
+
+function createLeakParticles(pos,color){
+  clearLeakParticles();
+  const geo=new THREE.BufferGeometry();
+  const positions=new Float32Array(MAX_PARTICLES*3);
+  const velocities=[];const lifetimes=[];
+  for(let i=0;i<MAX_PARTICLES;i++){
+    positions[i*3]=pos.x+(Math.random()-.5)*.3;
+    positions[i*3+1]=pos.y+(Math.random()-.5)*.3;
+    positions[i*3+2]=pos.z+(Math.random()-.5)*.3;
+    velocities.push({
+      x:(Math.random()-.5)*.06,
+      y:Math.random()*.08+.01,
+      z:(Math.random()-.5)*.06
+    });
+    lifetimes.push({life:Math.random(),max:.6+Math.random()*1.2});
+  }
+  geo.setAttribute('position',new THREE.BufferAttribute(positions,3));
+  const sizes=new Float32Array(MAX_PARTICLES).fill(0);
+  geo.setAttribute('size',new THREE.BufferAttribute(sizes,1));
+
+  const mat=new THREE.PointsMaterial({
+    color:new THREE.Color(color),size:0.12,transparent:true,
+    opacity:.9,sizeAttenuation:true,depthWrite:false,
+    blending:THREE.AdditiveBlending
+  });
+  const pts=new THREE.Points(geo,mat);
+  scene.add(pts);
+  leakParticles={pts,geo,velocities,lifetimes,pos,color};
+}
+
+function updateLeakParticles(){
+  if(!leakParticles)return;
+  const {pts,geo,velocities,lifetimes,pos}=leakParticles;
+  const arr=geo.attributes.position.array;
+  const t=clock.getElapsedTime();
+  for(let i=0;i<MAX_PARTICLES;i++){
+    lifetimes[i].life-=0.012;
+    if(lifetimes[i].life<0){
+      lifetimes[i].life=lifetimes[i].max;
+      arr[i*3]=pos.x+(Math.random()-.5)*.4;
+      arr[i*3+1]=pos.y+(Math.random()-.5)*.3;
+      arr[i*3+2]=pos.z+(Math.random()-.5)*.4;
+    }
+    arr[i*3]+=velocities[i].x;
+    arr[i*3+1]+=velocities[i].y*(1-lifetimes[i].life/lifetimes[i].max);
+    arr[i*3+2]+=velocities[i].z;
+    velocities[i].y*=0.992;
+  }
+  geo.attributes.position.needsUpdate=true;
+  pts.material.opacity=0.6+0.3*Math.sin(t*3);
+}
+
+function clearLeakParticles(){
+  if(leakParticles){scene.remove(leakParticles.pts);leakParticles.pts.geometry.dispose();leakParticles.pts.material.dispose();}
+  leakParticles=null;
+}
+
+// ════════════════════════════════════════════════════════
+// FLOW LINES (animated dashed paths)
+// ════════════════════════════════════════════════════════
+const flowCanvas=document.getElementById('flow-canvas');
+const fctx=flowCanvas.getContext('2d');
+let flowOffset=0;
+
+function resizeFlowCanvas(){flowCanvas.width=window.innerWidth;flowCanvas.height=window.innerHeight;}
+resizeFlowCanvas();window.addEventListener('resize',resizeFlowCanvas);
+
+// Project 3D position to 2D screen
+function project(v3){
+  const v=v3.clone().project(camera);
+  return{x:(v.x+1)/2*window.innerWidth,y:(-v.y+1)/2*window.innerHeight};
+}
+
+// Key waypoints for each flow path
+const FLOW_PATHS={
+  intake:[
+    new THREE.Vector3(-5.0,3.2,0),
+    new THREE.Vector3(-4.3,3.2,0),
+    new THREE.Vector3(-3.4,3.1,0),
+    new THREE.Vector3(-2.0,3.4,0.2),
+    new THREE.Vector3(-1.0,3.9,0.1),
+    new THREE.Vector3(0.5,4.0,0.2),
+    new THREE.Vector3(3.2,3.4,0.2),
+  ],
+  boost:[
+    new THREE.Vector3(3.2,3.4,0.2),
+    new THREE.Vector3(2.8,4.2,-0.3),
+    new THREE.Vector3(1.0,4.6,-0.3),
+    new THREE.Vector3(-0.5,4.8,-0.3),
+    new THREE.Vector3(-2.0,5.1,-0.3),
+  ],
+  cac:[
+    new THREE.Vector3(-2.0,5.1,-0.3),
+    new THREE.Vector3(-3.6,4.3,-0.8),
+    new THREE.Vector3(-3.2,3.6,-1.0),
+    new THREE.Vector3(-2.0,3.3,-1.15),
+    new THREE.Vector3(0,3.3,-1.15),
+    new THREE.Vector3(3.0,3.3,-1.15),
+  ],
+  exhaust:[
+    new THREE.Vector3(-3.0,2.9,1.4),
+    new THREE.Vector3(0,2.9,1.4),
+    new THREE.Vector3(2.2,3.0,1.2),
+    new THREE.Vector3(3.2,3.4,0.2),
+    new THREE.Vector3(4.0,2.0,0.6),
+    new THREE.Vector3(4.8,1.5,0.5),
+    new THREE.Vector3(4.8,0.1,0.5),
+    new THREE.Vector3(4.8,-1.4,0.5),
+    new THREE.Vector3(4.8,-2.5,0.5),
+  ],
+};
+
+const FLOW_COLORS={
+  intake:'rgba(0,229,200,',
+  boost:'rgba(33,150,243,',
+  cac:'rgba(33,100,200,',
+  exhaust:'rgba(255,109,0,',
+};
+
+function drawFlowPath(pts,colorBase,alpha=0.65,speed=0.8){
+  if(pts.length<2)return;
+  const projected=pts.map(p=>project(p));
+  fctx.save();
+  fctx.strokeStyle=colorBase+'0.1)';
+  fctx.lineWidth=2.5;
+  fctx.beginPath();
+  projected.forEach((p,i)=>i===0?fctx.moveTo(p.x,p.y):fctx.lineTo(p.x,p.y));
+  fctx.stroke();
+
+  // Animated dashes
+  fctx.strokeStyle=colorBase+alpha+')';
+  fctx.lineWidth=2;
+  fctx.setLineDash([8,14]);
+  fctx.lineDashOffset=-flowOffset*speed;
+  fctx.shadowColor=colorBase+'0.8)';
+  fctx.shadowBlur=6;
+  fctx.beginPath();
+  projected.forEach((p,i)=>i===0?fctx.moveTo(p.x,p.y):fctx.lineTo(p.x,p.y));
+  fctx.stroke();
+  fctx.setLineDash([]);
+  fctx.restore();
+}
+
+function drawFlows(state){
+  fctx.clearRect(0,0,flowCanvas.width,flowCanvas.height);
+  if(state.activeLeak==='F')return; // fuel leak — hide flows
+  const leakAlpha=state.activeLeak?0.35:0.65;
+  drawFlowPath(FLOW_PATHS.intake,FLOW_COLORS.intake,leakAlpha,1.0);
+  drawFlowPath(FLOW_PATHS.boost,FLOW_COLORS.boost,leakAlpha,0.8);
+  drawFlowPath(FLOW_PATHS.cac,FLOW_COLORS.cac,leakAlpha,0.7);
+  drawFlowPath(FLOW_PATHS.exhaust,FLOW_COLORS.exhaust,leakAlpha,1.2);
+}
+
+// ════════════════════════════════════════════════════════
+// ORBIT CONTROLS
+// ════════════════════════════════════════════════════════
+let drag=false,prevM={x:0,y:0};
+const sph={theta:0.6,phi:0.38,r:15};
+const camTarget=new THREE.Vector3(0,0.5,0);
+const camTargetLerp=new THREE.Vector3(0,0.5,0);
+
+canvas.addEventListener('mousedown',e=>{drag=true;prevM={x:e.clientX,y:e.clientY}});
+window.addEventListener('mouseup',()=>drag=false);
+canvas.addEventListener('mousemove',e=>{
+  if(!drag)return;
+  sph.theta-=(e.clientX-prevM.x)*0.007;
+  sph.phi=Math.max(.08,Math.min(Math.PI/2.05,sph.phi+(e.clientY-prevM.y)*.006));
+  prevM={x:e.clientX,y:e.clientY};
+});
+canvas.addEventListener('wheel',e=>{
+  sph.r=Math.max(5,Math.min(30,sph.r+e.deltaY*.014));
+  document.getElementById('zoom-sl').value=sph.r;
+},{passive:true});
+canvas.addEventListener('touchstart',e=>{if(e.touches.length===1){drag=true;prevM={x:e.touches[0].clientX,y:e.touches[0].clientY}}},{passive:true});
+window.addEventListener('touchend',()=>drag=false);
+canvas.addEventListener('touchmove',e=>{
+  if(!drag||e.touches.length!==1)return;
+  sph.theta-=(e.touches[0].clientX-prevM.x)*0.007;
+  sph.phi=Math.max(.08,Math.min(Math.PI/2.05,sph.phi+(e.touches[0].clientY-prevM.y)*.006));
+  prevM={x:e.touches[0].clientX,y:e.touches[0].clientY};
+},{passive:true});
+
+function updateCam(){
+  const cx=sph.r*Math.sin(sph.phi)*Math.sin(sph.theta);
+  const cy=sph.r*Math.cos(sph.phi);
+  const cz=sph.r*Math.sin(sph.phi)*Math.cos(sph.theta);
+  camera.position.set(cx,cy,cz);
+  camTargetLerp.lerp(camTarget,0.06);
+  camera.lookAt(camTargetLerp);
+}
+
+// Camera presets
+const CAM_PRESETS={
+  iso:  {theta:0.6,phi:0.38,r:15,tx:0,ty:0.5,tz:0},
+  front:{theta:Math.PI+0.1,phi:0.35,r:14,tx:0,ty:0.5,tz:0},
+  side: {theta:Math.PI/2+0.1,phi:0.30,r:13,tx:0,ty:0.5,tz:0},
+  top:  {theta:0.6,phi:0.08,r:16,tx:0,ty:0,tz:0},
+  rear: {theta:0.1,phi:0.35,r:13,tx:0,ty:0.5,tz:0},
+};
+let camAnim={active:false,from:{},to:{},t:0};
+
+function setCam(name){
+  const p=CAM_PRESETS[name];if(!p)return;
+  camAnim={active:true,from:{theta:sph.theta,phi:sph.phi,r:sph.r},to:p,t:0};
+  document.querySelectorAll('.cam-btn').forEach(b=>b.classList.remove('cam-act'));
+  const btn=document.getElementById('cbtn-'+name);if(btn)btn.classList.add('cam-act');
+}
+
+function tickCamAnim(){
+  if(!camAnim.active)return;
+  camAnim.t=Math.min(1,camAnim.t+0.04);
+  const ease=1-Math.pow(1-camAnim.t,3);
+  sph.theta=camAnim.from.theta+(camAnim.to.theta-camAnim.from.theta)*ease;
+  sph.phi=camAnim.from.phi+(camAnim.to.phi-camAnim.from.phi)*ease;
+  sph.r=camAnim.from.r+(camAnim.to.r-camAnim.from.r)*ease;
+  camTarget.set(camAnim.to.tx||0,camAnim.to.ty||0.5,camAnim.to.tz||0);
+  if(camAnim.t>=1)camAnim.active=false;
+}
+setCam('iso');
+
+// ════════════════════════════════════════════════════════
+// EXPLODE VIEW
+// ════════════════════════════════════════════════════════
+let explodeT=0,explodeTgt=0;
+const EXPLODE_OFFSETS=new Map([
+  [head,           new THREE.Vector3(0,2.5,0)],
+  [valveCov,       new THREE.Vector3(0,4.0,0)],
+  [intakeMan,      new THREE.Vector3(0,1.5,-2.2)],
+  [cac,            new THREE.Vector3(-2.0,4.0,-1.5)],
+  [turbo1,         new THREE.Vector3(2.5,2.5,0)],
+  [turbo2,         new THREE.Vector3(2.5,0,0)],
+  [exhMan,         new THREE.Vector3(0,1.0,2.5)],
+  [doc,            new THREE.Vector3(2.0,0,2.0)],
+  [dpf,            new THREE.Vector3(2.5,-1.0,2.5)],
+  [oilPan,         new THREE.Vector3(0,-2.2,0)],
+  [fuelRail,       new THREE.Vector3(0,1.5,-2.0)],
+  [airBox,         new THREE.Vector3(-2.0,0,0)],
+]);
+
+function toggleExplode(){
+  explodeTgt=explodeTgt===0?1:0;
+  const btn=document.getElementById('cbtn-exp');
+  btn.classList.toggle('cam-act',explodeTgt===1);
+}
+function tickExplode(){
+  explodeT+=(explodeTgt-explodeT)*0.04;
+  EXPLODE_OFFSETS.forEach((offset,mesh)=>{
+    if(!ORIG.has(mesh))return;
+    const orig=ORIG.get(mesh);
+    mesh.position.lerpVectors(orig,orig.clone().add(offset),explodeT);
+  });
+}
+
+// ════════════════════════════════════════════════════════
+// STATE + SENSORS
+// ════════════════════════════════════════════════════════
+const APP={activeLeak:null,severity:2,rpm:1800,load:75,activeZone:null,autoRotate:true};
+
+const SENSOR_DEF={
+  MAF:        {v:842, unit:'kg/h', mn:400,mx:1200,col:'#00E5C8'},
+  MAP_boost:  {v:218, unit:'kPa',  mn:100,mx:320, col:'#2196F3'},
+  MAP_cac:    {v:213, unit:'kPa',  mn:100,mx:315, col:'#2196F3'},
+  T_cac_out:  {v:52,  unit:'°C',   mn:20, mx:130, col:'#9B7FFF'},
+  T_exh_man:  {v:512, unit:'°C',   mn:280,mx:780, col:'#FF6D00'},
+  dP_dpf:     {v:4.2, unit:'kPa',  mn:0,  mx:20,  col:'#FF8C42'},
+};
+const SENSOR_NAMES={MAF:'Mass Air Flow',MAP_boost:'Boost Pressure',MAP_cac:'CAC Outlet Press',T_cac_out:'CAC Outlet Temp',T_exh_man:'Exh Manifold Temp',dP_dpf:'DPF Back-Pressure'};
+
+const LEAK_DEF={
+  A:{zone:1,sensor:'MAF',       delta:-.14,label:'Zone A — Airflow Meter → Compressor',  action:'Inspect airflow meter piping and MAF housing seal. Check clamp torque (12 Nm). Verify no cracks in flex hose.'},
+  B:{zone:2,sensor:'MAP_boost', delta:-.16,label:'Zone B — Compressor Outlet / Pre-CAC', action:'Inspect turbocharger outlet V-band clamp (68 Nm). Check boost pipe weld seam. Look for hairline cracks near elbow.'},
+  C:{zone:2,sensor:'MAP_cac',   delta:-.14,label:'Zone C — CAC Outlet → Intake Manifold',action:'Inspect CAC outlet hose and spring clamps. Check intercooler end-tank welds. Replace silicone coupler if hardened.'},
+  D:{zone:3,sensor:'T_exh_man', delta:-.11,label:'Zone D — Exhaust Manifold Gasket',     action:'Inspect exhaust manifold gaskets cyl 3-4. Check stud torque (65 Nm). Look for carbon tracking at head-manifold interface.'},
+  E:{zone:3,sensor:'dP_dpf',    delta:-.22,label:'Zone E — DPF/SCR Aftertreatment',      action:'Inspect DPF inlet/outlet flange gaskets. Check SCR inlet flex joint. Verify DEF injector nozzle seal integrity.'},
+  F:{zone:2,sensor:'MAP_boost', delta:-.04,label:'🔥 FUEL RAIL LEAK — CRITICAL',          action:'STOP ENGINE IMMEDIATELY. Fuel rail leak detected. Potential fire hazard. Inspect rail o-rings and injector seals. Do NOT restart until repaired.'},
+};
+
+// Severity labels and flow loss %
+const SEV_LABELS=['','Small (2%)','Medium (8%)','Large (15%)'];
+const SEV_FLOW=[0,0.02,0.08,0.15];
+
+function buildSensors(){
+  const w=document.getElementById('sensors-wrap');
+  w.innerHTML='';
+  Object.entries(SENSOR_DEF).forEach(([key,s])=>{
+    const pct=((s.v-s.mn)/(s.mx-s.mn)*100).toFixed(1);
+    w.innerHTML+=`<div class="sg-card" id="sg-${key}" style="margin-bottom:5px">
+      <div class="sg-top">
+        <span class="sg-name">${SENSOR_NAMES[key]}</span>
+        <span class="sg-val" id="sgv-${key}" style="color:${s.col}">${s.v.toFixed(1)}<span class="sg-unit">${s.unit}</span></span>
+      </div>
+      <div class="sg-bar-bg"><div class="sg-bar" id="sgb-${key}" style="width:${pct}%;background:${s.col}"></div></div>
+      <div class="sg-residual sg-ok" id="sgr-${key}">RESIDUAL: +0.0 ${s.unit} (0.0%)</div>
+    </div>`;
+  });
+}
+
+function updateSensors(leakZone){
+  const sevMul=[0,0.06,0.14,0.24][APP.severity];
+  const rpmScale=APP.rpm/1800;const loadScale=APP.load/75;
+
+  Object.entries(SENSOR_DEF).forEach(([key,s])=>{
+    let val=s.v*rpmScale*0.3+s.v*loadScale*0.7;
+    let res=0;
+
+    if(leakZone){
+      const def=LEAK_DEF[leakZone];
+      if(def.sensor===key){
+        val=val*(1+def.delta*sevMul/0.14);
+        res=val-(s.v*rpmScale*0.3+s.v*loadScale*0.7);
+      }
+      // Cascade effects
+      if(leakZone==='A'&&(key==='MAP_boost'||key==='MAP_cac'))val*=.96;
+      if(leakZone==='B'&&key==='MAP_cac')val*=.91;
+      if(leakZone==='B'&&key==='T_cac_out')val+=8*sevMul/0.14;
+      if(leakZone==='C'&&key==='MAP_cac')val*=.88;
+      if(leakZone==='D'&&key==='MAP_boost')val*=.97;
+      if(leakZone==='D'&&key==='dP_dpf')val*=.88;
+      if(leakZone==='E'&&key==='dP_dpf')val*=.65;
+      if(leakZone==='E'&&key==='T_exh_man')val+=18*sevMul/0.14;
+      if(key!==def.sensor)res=val-(s.v*rpmScale*0.3+s.v*loadScale*0.7);
+    }
+
+    const pct=Math.max(2,Math.min(100,(val-s.mn)/(s.mx-s.mn)*100));
+    const resPct=(res/Math.max(.01,s.v)*100).toFixed(1);
+    const resAbs=Math.abs(res/Math.max(.01,s.v));
+    const cls=resAbs>.08?'sg-bad-c':resAbs>.03?'sg-warn-c':'sg-ok';
+    const cardCls=resAbs>.08?'sg-bad':resAbs>.03?'sg-warn':'';
+    const barCol=resAbs>.08?'#FF3B3B':resAbs>.03?'#FF6D00':s.col;
+
+    const vEl=document.getElementById('sgv-'+key);
+    const bEl=document.getElementById('sgb-'+key);
+    const rEl=document.getElementById('sgr-'+key);
+    const cEl=document.getElementById('sg-'+key);
+    if(vEl){vEl.textContent=val.toFixed(1);vEl.style.color=barCol;}
+    if(bEl){bEl.style.width=pct+'%';bEl.style.background=barCol;}
+    if(rEl){rEl.textContent=`RESIDUAL: ${res>=0?'+':''}${res.toFixed(1)} ${s.unit} (${resPct}%)`;rEl.className='sg-residual '+cls;}
+    if(cEl){cEl.className='sg-card '+(leakZone?cardCls:'');}
+  });
+  // Header
+  const mafV=SENSOR_DEF.MAF.v*rpmScale*0.3+SENSOR_DEF.MAF.v*loadScale*0.7;
+  const bstV=SENSOR_DEF.MAP_boost.v*rpmScale*0.3+SENSOR_DEF.MAP_boost.v*loadScale*0.7;
+  const exhV=SENSOR_DEF.T_exh_man.v*rpmScale*0.3+SENSOR_DEF.T_exh_man.v*loadScale*0.7;
+  document.getElementById('hv-maf').textContent=mafV.toFixed(0);
+  document.getElementById('hv-boost').textContent=bstV.toFixed(0);
+  document.getElementById('hv-exh').textContent=exhV.toFixed(0);
+}
+
+// ════════════════════════════════════════════════════════
+// ENERGY FIELD
+// ════════════════════════════════════════════════════════
+const EF_CH=['MAF','Boost','CAC-P','CAC-T','Exh-T','DPF'];
+const EF_HEALTHY=[
+  [1.00,0.87,0.78,0.40,0.20,0.12],
+  [0.87,1.00,0.92,0.50,0.30,0.16],
+  [0.78,0.92,1.00,0.60,0.28,0.20],
+  [0.40,0.50,0.60,1.00,0.65,0.25],
+  [0.20,0.30,0.28,0.65,1.00,0.50],
+  [0.12,0.16,0.20,0.25,0.50,1.00],
+];
+const EF_DISRUPTION={
+  A:[[0,1],[0,2],[0,3],[0,4],[0,5],[1,0],[2,0]],
+  B:[[1,0],[1,2],[1,3],[2,1],[2,0],[3,1]],
+  C:[[2,0],[2,1],[2,3],[3,2],[0,2]],
+  D:[[4,0],[4,1],[4,2],[4,3],[4,5],[0,4],[1,4]],
+  E:[[5,0],[5,1],[5,2],[5,3],[5,4],[4,5],[3,5]],
+  F:[[1,2],[2,1],[0,1],[1,0]],
+};
+
+function renderEF(leakZone){
+  const grid=document.getElementById('ef-grid');
+  const lbls=document.getElementById('ef-labels');
+  grid.innerHTML='';lbls.innerHTML='';
+
+  const field=EF_HEALTHY.map(r=>[...r]);
+  const disrupted=new Set();
+  if(leakZone&&EF_DISRUPTION[leakZone]){
+    const sev=APP.severity;
+    EF_DISRUPTION[leakZone].forEach(([r,c])=>{
+      const d=(0.3+sev*0.18)*(0.7+Math.random()*.5);
+      field[r][c]=Math.max(-.4,field[r][c]-d);
+      field[c][r]=field[r][c];
+      disrupted.add(r+','+c);disrupted.add(c+','+r);
+    });
+  }
+
+  for(let r=0;r<6;r++){
+    for(let c=0;c<6;c++){
+      const v=field[r][c];
+      const isDis=disrupted.has(r+','+c)&&leakZone;
+      let bg;
+      if(r===c){bg='rgba(245,197,24,0.3)';}
+      else if(isDis){bg=`rgba(255,59,59,${0.2+Math.abs(v)*0.6})`;}
+      else{
+        if(v>=0)bg=`rgba(33,150,243,${0.08+v*0.65})`;
+        else bg=`rgba(255,100,80,${0.08+Math.abs(v)*0.55})`;
+      }
+      const cell=document.createElement('div');
+      cell.className='ef-cell';cell.style.background=bg;
+      if(isDis)cell.style.boxShadow=`0 0 6px rgba(255,59,59,0.5)`;
+      cell.innerHTML=`<div class="ef-tip">${EF_CH[r]}↔${EF_CH[c]}: ${v.toFixed(2)}</div>`;
+      grid.appendChild(cell);
+    }
+    const l=document.createElement('div');l.className='ef-lbl';l.textContent=EF_CH[r];lbls.appendChild(l);
+  }
+}
+
+// ════════════════════════════════════════════════════════
+// ZONE MATERIAL PULSE
+// ════════════════════════════════════════════════════════
+function setZoneMats(leakZone,t){
+  // Reset all to original zone colors
+  Object.entries(ZPARTS).forEach(([z,parts])=>{
+    const base={1:0x00E5C8,2:0x2196F3,3:0xFF6D00}[z];
+    parts.forEach(p=>{
+      if(!p.material)return;
+      if(typeof p.material.emissiveIntensity!=='undefined'){
+        p.material.emissiveIntensity=0;
+      }
+    });
+  });
+
+  if(!leakZone)return;
+  const def=LEAK_DEF[leakZone];if(!def)return;
+  const parts=ZPARTS[def.zone]||[];
+  const pulse=0.12+0.10*Math.sin(t*4);
+  parts.forEach(p=>{
+    if(!p.material||typeof p.material.emissiveIntensity==='undefined')return;
+    const col=leakZone==='F'?new THREE.Color(0xFF8800):new THREE.Color(0xFF3B3B);
+    p.material.emissive=col;
+    p.material.emissiveIntensity=pulse;
+  });
+}
+
+// ════════════════════════════════════════════════════════
+// LEAK SIMULATION
+// ════════════════════════════════════════════════════════
+function simLeak(zone){
+  APP.activeLeak=zone;APP.autoRotate=false;
+  document.querySelectorAll('.lk-btn').forEach(b=>b.classList.remove('act'));
+  document.getElementById('lb-'+zone).classList.add('act');
+
+  const def=LEAK_DEF[zone];
+  const pos=LEAK_POS[zone];
+  const col=zone==='F'?0xFF8800:def.zone===3?0xFF3B3B:def.zone===1?0x00E5C8:0xFF6D00;
+  createLeakParticles(pos,col);
+
+  // Zone status
+  [1,2,3].forEach(z=>{ document.getElementById('zstat'+z).className='zn-status zs-ok'; document.getElementById('zstat'+z).textContent='■ NOMINAL'; });
+  document.getElementById('zstat'+def.zone).textContent='■ LEAK DETECTED';
+  document.getElementById('zstat'+def.zone).className='zn-status zs-bad';
+
+  // Go/NoGo
+  const gonogo=document.getElementById('gonogo');
+  gonogo.className='nogo';
+  document.getElementById('gng-lbl').textContent='NO-GO';
+  document.getElementById('gng-sub').textContent=def.label.substring(0,38);
+  document.getElementById('main-status').className='status-badge sb-leak';
+  document.getElementById('status-txt').textContent='LEAK DETECTED';
+
+  // Confidence
+  const conf=70+APP.severity*9+Math.round(Math.random()*5);
+  const sev=SEV_LABELS[APP.severity];
+  const flow=(SEV_FLOW[APP.severity]*100).toFixed(0);
+  document.getElementById('hv-conf').textContent=conf+'%';
+  document.getElementById('hv-conf').style.color='var(--red)';
+  document.getElementById('al-zone').textContent=def.label;
+  document.getElementById('al-conf').textContent=`Confidence: ${conf}% · Severity: ${sev} · Flow Loss: ~${flow}%`;
+  document.getElementById('leak-alert').style.display='block';
+
+  // Action
+  const ac=document.getElementById('action-card');
+  ac.className='action-card act-bad';
+  document.getElementById('action-txt').textContent=def.action;
+  document.getElementById('action-txt').style.color='var(--orange)';
+
+  // Detection score
+  const score=(0.7+APP.severity*0.95+Math.random()*.3).toFixed(2);
+  document.getElementById('det-num').textContent=score;
+  document.getElementById('det-num').style.color='var(--red)';
+  document.getElementById('det-bar').style.width=Math.min(100,parseFloat(score)/5*100)+'%';
+  document.getElementById('det-bar').style.background='var(--red)';
+  document.getElementById('det-thresh').textContent='ABOVE THRESHOLD (2.50)';
+  document.getElementById('det-thresh').style.color='var(--red)';
+  document.getElementById('hud-ef').textContent=score;
+  document.getElementById('hud-ef').parentElement.className='hud hud-warn';
+  document.getElementById('hud-cos').textContent=(0.97-parseFloat(score)*0.06).toFixed(3);
+
+  updateSensors(zone);
+  renderEF(zone);
+
+  // Gold accent light flicker → red
+  goldAccent.color.setHex(zone==='F'?0xFF6600:0xFF2200);
+  goldAccent.intensity=0.8;
+
+  // Focus camera on leak zone
+  if(def.zone===1){camTarget.set(-3,2.5,0);sph.theta=Math.PI+0.8;sph.phi=0.35;sph.r=10;}
+  else if(def.zone===2){camTarget.set(0,4,0);sph.theta=Math.PI-0.3;sph.phi=0.32;sph.r=11;}
+  else{camTarget.set(3,1,0.5);sph.theta=0.2;sph.phi=0.38;sph.r=11;}
+}
+
+function clearLeak(){
+  APP.activeLeak=null;APP.autoRotate=true;
+  clearLeakParticles();
+  document.querySelectorAll('.lk-btn').forEach(b=>b.classList.remove('act'));
+  [1,2,3].forEach(z=>{ document.getElementById('zstat'+z).textContent='■ NOMINAL'; document.getElementById('zstat'+z).className='zn-status zs-ok'; });
+  document.getElementById('gonogo').className='go';
+  document.getElementById('gng-lbl').textContent='GO';
+  document.getElementById('gng-sub').textContent='All zones within tolerance';
+  document.getElementById('main-status').className='status-badge sb-healthy';
+  document.getElementById('status-txt').textContent='ENGINE HEALTHY';
+  document.getElementById('hv-conf').textContent='—';
+  document.getElementById('hv-conf').style.color='var(--muted)';
+  document.getElementById('leak-alert').style.display='none';
+  document.getElementById('action-card').className='action-card';
+  document.getElementById('action-txt').textContent='Engine operating within nominal parameters. All twin residuals within ±2% tolerance.';
+  document.getElementById('action-txt').style.color='var(--teal)';
+  document.getElementById('det-num').textContent='0.14';document.getElementById('det-num').style.color='var(--gold)';
+  document.getElementById('det-bar').style.width='5.6%';document.getElementById('det-bar').style.background='var(--teal)';
+  document.getElementById('det-thresh').textContent='BELOW THRESHOLD (2.50)';document.getElementById('det-thresh').style.color='var(--teal)';
+  document.getElementById('hud-ef').textContent='0.14';document.getElementById('hud-ef').parentElement.className='hud';
+  document.getElementById('hud-cos').textContent='0.997';
+  goldAccent.intensity=0;
+  ZPARTS[1].concat(ZPARTS[2],ZPARTS[3]).forEach(p=>{if(p.material&&p.material.emissiveIntensity!==undefined)p.material.emissiveIntensity=0;});
+  updateSensors(null);renderEF(null);
+}
+
+function focusZone(z){
+  APP.activeZone=APP.activeZone===z?null:z;
+  document.querySelectorAll('.zone-card').forEach(c=>c.classList.remove('act'));
+  if(APP.activeZone){
+    document.getElementById('zcard'+z).classList.add('act');
+    if(z===1){camTarget.set(-3,3,0);sph.theta=Math.PI+0.6;sph.phi=0.35;sph.r=10;}
+    else if(z===2){camTarget.set(0,4.5,0);sph.theta=Math.PI-0.2;sph.phi=0.3;sph.r=10;}
+    else{camTarget.set(3.5,1.5,0.5);sph.theta=0.1;sph.phi=0.32;sph.r=10;}
+  }else{camTarget.set(0,0.5,0);}
+}
+
+// ════════════════════════════════════════════════════════
+// CONTROLS
+// ════════════════════════════════════════════════════════
+function onSev(v){
+  APP.severity=parseInt(v);
+  document.getElementById('sev-v').textContent=['','SM','MED','LGE'][v];
+  if(APP.activeLeak)simLeak(APP.activeLeak);
+}
+function onRPM(v){
+  APP.rpm=parseInt(v);document.getElementById('rpm-v').textContent=v;
+  document.getElementById('hv-rpm').textContent=v;
+  if(!APP.activeLeak)updateSensors(null);
+}
+function onLoad(v){
+  APP.load=parseInt(v);document.getElementById('load-v').textContent=v+'%';
+  if(!APP.activeLeak)updateSensors(null);
+}
+function onZoom(v){sph.r=parseFloat(v);}
+function onOpacity(v){
+  const op=parseInt(v)/100;document.getElementById('opac-v').textContent=v+'%';
+  EG.traverse(c=>{if(c.isMesh&&c.material){c.material.transparent=op<1;c.material.opacity=op;}});
+}
+
+// ════════════════════════════════════════════════════════
+// RAYCASTING (click to inspect)
+// ════════════════════════════════════════════════════════
+const raycaster=new THREE.Raycaster();const mouse=new THREE.Vector2();
+const tooltip=document.getElementById('cursor-tooltip');
+
+canvas.addEventListener('mousemove',e=>{
+  mouse.x=(e.clientX/window.innerWidth)*2-1;
+  mouse.y=-(e.clientY/window.innerHeight)*2+1;
+  raycaster.setFromCamera(mouse,camera);
+  const hits=raycaster.intersectObjects(EG.children,true);
+  if(hits.length>0){
+    const h=hits[0];
+    let name='Part';
+    if(ZPARTS[1].includes(h.object)||ZPARTS[1].some(p=>p.children&&p.children.includes(h.object)))name='Zone 1 — Intake';
+    else if(ZPARTS[2].includes(h.object))name='Zone 2 — Charge Air';
+    else if(ZPARTS[3].includes(h.object))name='Zone 3 — Exhaust';
+    else name='Internal Component';
+    tooltip.style.display='block';tooltip.style.left=e.clientX+'px';tooltip.style.top=e.clientY+'px';
+    tooltip.textContent=name;document.body.style.cursor='pointer';
+  }else{tooltip.style.display='none';document.body.style.cursor='crosshair';}
+});
+
+canvas.addEventListener('click',e=>{
+  raycaster.setFromCamera(mouse,camera);
+  const hits=raycaster.intersectObjects(EG.children,true);
+  if(hits.length>0){
+    const obj=hits[0].object;
+    if(ZPARTS[1].includes(obj))focusZone(1);
+    else if(ZPARTS[2].includes(obj))focusZone(2);
+    else if(ZPARTS[3].includes(obj))focusZone(3);
+  }
+});
+
+// ════════════════════════════════════════════════════════
+// ANIMATE TURBO BLADES
+// ════════════════════════════════════════════════════════
+let turboAngle=0;
+
+// ════════════════════════════════════════════════════════
+// CLOCK + SESSION TIMER
+// ════════════════════════════════════════════════════════
+const clock=new THREE.Clock();
+const sessionStart=Date.now();
+
+function updateTimer(){
+  const el=Math.floor((Date.now()-sessionStart)/1000);
+  const m=String(Math.floor(el/60)).padStart(2,'0');
+  const s=String(el%60).padStart(2,'0');
+  document.getElementById('hv-time').textContent=m+':'+s;
+  document.getElementById('hud-time').textContent=m+':'+s;
+}
+
+// ════════════════════════════════════════════════════════
+// RENDER LOOP
+// ════════════════════════════════════════════════════════
+function animate(){
+  requestAnimationFrame(animate);
+  const t=clock.getElapsedTime();
+  const dt=clock.getDelta();
+
+  // Piston animation
+  const rpmRad=APP.rpm*Math.PI/60;
+  pistons.forEach(({g,offset})=>{
+    if(!ORIG.has(g))return;
+    const orig=ORIG.get(g);
+    g.position.y=orig.y+Math.sin(t*rpmRad*0.08+offset)*0.55;
+  });
+
+  // Turbo spin
+  const turboSpeed=APP.rpm/60*0.015;
+  turboAngle+=turboSpeed;
+  if(turbo1)turbo1.rotation.y=turboAngle;
+  if(turbo2)turbo2.rotation.y=-turboAngle*1.2;
+
+  // Auto-rotate
+  if(APP.autoRotate&&!drag&&!camAnim.active){
+    sph.theta+=0.0006;
+  }
+
+  tickCamAnim();
+  tickExplode();
+  updateCam();
+
+  // Zone material pulse
+  setZoneMats(APP.activeLeak,t);
+
+  // Gold accent gentle pulse
+  if(!APP.activeLeak){
+    goldAccent.intensity=0.15+0.1*Math.sin(t*0.8);
+    goldAccent.color.setHex(0xF5C518);
+  }else{
+    goldAccent.intensity=0.6+0.4*Math.sin(t*5);
+  }
+
+  // Fill light gentle shift
+  fillLight.position.x=-8+Math.sin(t*0.3)*2;
+  fillLight.position.z=6+Math.cos(t*0.4)*2;
+
+  updateLeakParticles();
+
+  // Flow lines
+  flowOffset+=0.5;
+  drawFlows(APP);
+
+  updateTimer();
+
+  renderer.render(scene,camera);
+}
+
+// ════════════════════════════════════════════════════════
+// INIT
+// ════════════════════════════════════════════════════════
+buildSensors();
+updateSensors(null);
+renderEF(null);
+setCam('iso');
+animate();
+</script>
+</body>
+</html>
